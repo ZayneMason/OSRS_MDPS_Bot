@@ -1,0 +1,14 @@
+[{
+  "projectUrl": "https://discord.gg/lucid-plugs",
+  "provider": "lucid-plugins",
+  "name": "Zayne MDPS",
+  "description": "MDPS experiment for tile selection",
+  "id": "zaynemdps-plugin",
+  "releases": [{
+    "date": "2024-05-07",
+    "sha512sum": "7339840AA26DF4B70C5992CBE4E5A279BB190575E38ED97C3D33F49BBAC753A6F8469CABC7E933CC3203B9DC084502481E50C479B28A4BF5E57805B761840CFA",
+    "version": "1.0.1",
+    "url": "https://github.com/lucid-plugins/public-plugins/blob/master/release/zayne-mdps-1.0.1.jar?raw=true",
+    "requires": "^1.0.0"
+  }]
+}]
