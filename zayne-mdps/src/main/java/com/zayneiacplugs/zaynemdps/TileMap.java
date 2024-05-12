@@ -6,6 +6,8 @@ import net.runelite.api.coords.LocalPoint;
 import javax.inject.Inject;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 public class TileMap {
     private final ZayneMDPSConfig config;
@@ -17,7 +19,7 @@ public class TileMap {
         this.config = config;
     }
 
-    public void addTile(LocalPoint localPoint, NPC npc, ZayneMDPSConfig.Option damageType, boolean inLoS) {
+    public void addTile(LocalPoint localPoint, EnhancedNPC npc, ZayneMDPSConfig.Option damageType, boolean inLoS) {
         if (!tileMap.containsKey(localPoint)) {
             tileMap.put(localPoint, new TargetTile(localPoint, npc, damageType, inLoS, this.config));
         } else {

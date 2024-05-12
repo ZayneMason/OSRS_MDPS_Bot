@@ -1,7 +1,7 @@
 Manifest-Version: 1.0
 Plugin-Version: 1.0.1
 Plugin-Id: zaynemdps-plugin
-Plugin-Provider: lucid-plugins
+Plugin-Provider: Zayneiac
 Plugin-Description: MDPS experiment for tile selection
 Plugin-License: 3-Clause BSD License
 

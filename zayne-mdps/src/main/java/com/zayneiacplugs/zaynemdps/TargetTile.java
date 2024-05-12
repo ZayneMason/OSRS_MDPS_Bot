@@ -15,13 +15,13 @@ import java.util.stream.Collectors;
 public class TargetTile {
     private final LocalPoint localPoint;
     private final ZayneMDPSConfig config;
-    private volatile ArrayList<NPC> npcs = new ArrayList<>();
+    private volatile ArrayList<EnhancedNPC> npcs = new ArrayList<>();
     private volatile ArrayList<ZayneMDPSConfig.Option> damageTypes = new ArrayList<>();
     private volatile boolean inLoS;
     private volatile ClientTick clientTick;
     private volatile Map<Color, Integer> colorMap;
 
-    public TargetTile(LocalPoint localPoint, NPC npc, ZayneMDPSConfig.Option damageType, boolean inLoS, ZayneMDPSConfig config) {
+    public TargetTile(LocalPoint localPoint, EnhancedNPC npc, ZayneMDPSConfig.Option damageType, boolean inLoS, ZayneMDPSConfig config) {
         this.localPoint = localPoint;
         this.config = config;
         this.addNPC(npc);
@@ -33,7 +33,7 @@ public class TargetTile {
         return this.localPoint;
     }
 
-    public ArrayList<NPC> getNPCs() {
+    public ArrayList<EnhancedNPC> getNPCs() {
         return this.npcs;
     }
 
@@ -57,14 +57,14 @@ public class TargetTile {
         this.damageTypes.add(damageType);
     }
 
-    public void addNPC(NPC npc) {
+    public void addNPC(EnhancedNPC npc) {
         if (npc == null) {
             MessageUtils.addMessage("NPC CAN'T BE NULL");
         }
         this.npcs.add(npc);
     }
 
-    public int distinctDamageTypes(){
+    public int distinctDamageTypes() {
         List<ZayneMDPSConfig.Option> relevantDamageTypes = getDamageTypes().stream()
                 .filter(dt -> dt != ZayneMDPSConfig.Option.OUT_OF_RANGE_IN_LOS && dt != ZayneMDPSConfig.Option.OUT_OF_RANGE_OUT_LOS)
                 .collect(Collectors.toList());

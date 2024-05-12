@@ -12,19 +12,19 @@ plugins {
     kotlin("kapt") version "1.6.21"
 }
 
-project.extra["GithubUrl"] = "https://github.com/lucid-plugins/public-plugins"
-project.extra["GithubUserName"] = "lucid-plugins"
-project.extra["GithubRepoName"] = "public-plugins"
+project.extra["GithubUrl"] = "https://github.com/ZayneMason/OSRS_MDPS_Bot"
+project.extra["GithubUserName"] = "ZayneMason"
+project.extra["GithubRepoName"] = "OSRS_MDPS_Bot"
 
 apply<JavaLibraryPlugin>()
 apply<BootstrapPlugin>()
 apply<CheckstylePlugin>()
 
 allprojects {
-    group = "com.lucidplugins"
+    group = "com.zayneiac-plugins"
 
-    project.extra["PluginProvider"] = "lucid-plugins"
-    project.extra["ProjectSupportUrl"] = "https://discord.gg/lucid-plugs"
+    project.extra["PluginProvider"] = "Zayneiac"
+    project.extra["ProjectSupportUrl"] = "HAHAHAHAHAH"
     project.extra["PluginLicense"] = "3-Clause BSD License"
 
     apply<JavaPlugin>()

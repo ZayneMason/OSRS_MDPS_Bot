@@ -1,5 +1,6 @@
 package com.zayneiacplugs.zaynemdps;
 
+import javax.inject.Inject;
 import java.awt.*;
 
 public class NPCConfig {
@@ -7,12 +8,14 @@ public class NPCConfig {
     private final String attackStyle;
     private final int range;
     private ZayneMDPSConfig config;
+    private MonsterStats monsterStats;
 
     public NPCConfig(String name, String attackStyle, int range, ZayneMDPSConfig config) {
         this.name = name;
         this.attackStyle = attackStyle;
         this.range = range;
         this.config = config;
+        this.monsterStats = RuneScapeWikiScraper.getMonsterStats(name);
     }
 
     public String getName() {
@@ -37,10 +40,6 @@ public class NPCConfig {
         return ZayneMDPSConfig.Option.MELEE;
     }
 
-    public ZayneMDPSConfig config() {
-        return config;
-    }
-
     public int getRange() {
         return range;
     }
@@ -62,5 +61,13 @@ public class NPCConfig {
                 return config.outLoSColor();
         }
         return config.meleeColor();
+    }
+
+    public int getHealth() {
+        return 0;
+    }
+
+    public MonsterStats getMonsterStats() {
+        return monsterStats;
     }
 }

@@ -11,6 +11,7 @@ import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayLayer;
 import net.runelite.client.ui.overlay.OverlayPosition;
 import net.runelite.client.ui.overlay.OverlayUtil;
+import net.unethicalite.api.utils.MessageUtils;
 
 import javax.annotation.Nullable;
 import javax.inject.Inject;
@@ -22,19 +23,15 @@ import java.util.stream.Collectors;
 import static net.runelite.client.ui.overlay.OverlayPriority.LOW;
 
 public class ZayneMDPSOverlay extends Overlay {
-    private final Client client;
-    private final ZayneMDPSConfig config;
-    private final NPCHandler npcHandler;
-    private final HashMap<LocalPoint, TargetTile> map;
+    private Client client;
+    private ZayneMDPSConfig config;
+    private NPCHandler npcHandler;
+    private HashMap<LocalPoint, TargetTile> map;
+    private State state;
     private volatile TileMap tileMap;
 
     @Inject
-    public ZayneMDPSOverlay(Client client, ZayneMDPSConfig config, TileMap tileMap, NPCHandler npcHandler) {
-        this.client = client;
-        this.config = config;
-        this.tileMap = tileMap;
-        this.npcHandler = npcHandler;
-        this.map = (HashMap<LocalPoint, TargetTile>) tileMap.getMap();
+    public ZayneMDPSOverlay() {
         setPosition(OverlayPosition.DYNAMIC);
         setPriority(LOW);
         setLayer(OverlayLayer.UNDER_WIDGETS);
@@ -42,20 +39,39 @@ public class ZayneMDPSOverlay extends Overlay {
 
     @Override
     public Dimension render(Graphics2D graphics) {
-        npcHandler.process(client, config, tileMap);
-        for (TargetTile targetTile : map.values()) {
-            renderTile(graphics, targetTile);
+        for (EnhancedNPC npc : npcHandler.getEnhancedNPCS()) {
+            drawNPCInfo(graphics, npc);
         }
-        return null;
+            if (state.getUpToDate()) {
+                for (TargetTile targetTile : map.values()) {
+                    renderTile(graphics, targetTile);
+                }
+            }
+
+            return null;
+    }
+
+    private void drawNPCInfo(Graphics2D graphics, EnhancedNPC npc) {
+        OverlayUtil.renderActorParagraph(graphics, npc.getNpc(), npc.getNpcConfig().getName() + npc.getUniqueId(), Color.BLACK);
     }
 
     private void renderTile(Graphics2D graphics, TargetTile targetTile) {
+        if (targetTile == null || client == null) {
+            MessageUtils.addMessage("targetTile or client is null");
+            return;
+        }
         Polygon poly = Perspective.getCanvasTilePoly(client, targetTile.getLocalPoint());
+        if (poly == null) {
+            MessageUtils.addMessage("Unable to compute polygon for tile");
+            return;
+        }
         if (config.fillTiles()) renderAttackStyles(graphics, targetTile, poly);
-        //drawNPCNames(graphics, targetTile);
     }
 
     private void renderAttackStyles(Graphics2D graphics, TargetTile tile, Polygon poly) {
+        if (tile.getDamageTypes() == null){
+            MessageUtils.addMessage("damageTypes null at renderAttackStyles");
+        }
         Set<ZayneMDPSConfig.Option> relevantDamageTypes = tile.getDamageTypes().stream()
                 .filter(dt -> dt != ZayneMDPSConfig.Option.OUT_OF_RANGE_IN_LOS && dt != ZayneMDPSConfig.Option.OUT_OF_RANGE_OUT_LOS)
                 .collect(Collectors.toSet());
@@ -63,11 +79,15 @@ public class ZayneMDPSOverlay extends Overlay {
         Set<Color> distinctColors = relevantDamageTypes.stream()
                 .map(this::getAttackColor)  // Convert each damage type to its color
                 .collect(Collectors.toSet());
+
+        if (distinctColors == null){
+            MessageUtils.addMessage("distictColors null at renderAttackStyles");
+        }
         int total = distinctColors.size();
-        double angleStep = 360.0 / total;
-        int radius = 48;  // Adjust based on your need
-        double startAngle = 0;
         if (total > 0) {
+            double angleStep = 360.0 / total;
+            int radius = 48;  // Adjust based on your need
+            double startAngle = 0;
             for (Color color : distinctColors) {
                 Polygon segment = createCircleSegment(client, tile.getLocalPoint(), startAngle, angleStep, radius);
                 graphics.setColor(color);
@@ -95,7 +115,7 @@ public class ZayneMDPSOverlay extends Overlay {
 
     private Polygon createCircleSegment(Client client, LocalPoint center, double startAngle, double sweepAngle, int radius) {
         Polygon poly = new Polygon();
-        double radStep = Math.toRadians(60);  // Step for arc resolution
+        double radStep = Math.toRadians(120);  // Step for arc resolution
 
         // Create the arc from startAngle to startAngle + sweepAngle
         for (double angle = startAngle; angle <= startAngle + sweepAngle; angle += radStep) {
@@ -115,25 +135,6 @@ public class ZayneMDPSOverlay extends Overlay {
         }
 
         return poly;
-    }
-
-
-    private void drawNPCNames(Graphics2D graphics2D, TargetTile targetTile) {
-        if (targetTile.getInLoS()) {
-            String text = targetTile.getNPCs().stream().map(NPC::getName).collect(Collectors.toList()).toString();
-            final Point point = Perspective.getCanvasTextLocation(client, graphics2D, targetTile.getLocalPoint(), text, -25);
-            if (point == null) {
-                return;
-            }
-            final Font originalFont = graphics2D.getFont();
-            graphics2D.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 5));
-            if (targetTile.getInLoS()) {
-                OverlayUtil.renderTextLocation(graphics2D, point, text, config.inLoSColor());
-            } else {
-                OverlayUtil.renderTextLocation(graphics2D, point, text, config.outLoSColor());
-            }
-            graphics2D.setFont(originalFont);
-        }
     }
 
     private Color getAttackColor(ZayneMDPSConfig.Option attackStyle) {
@@ -189,5 +190,31 @@ public class ZayneMDPSOverlay extends Overlay {
         return tileHeights[plane][x][y];
     }
 
+    public void addState(State state) {
+        if (this.state == null) {
+            this.state = state;
+            this.client = state.client;
+            this.config = state.config;
+            this.tileMap = state.tileMap;
+            if (tileMap == null){
+                MessageUtils.addMessage("Tile map null");
+            }
+            this.npcHandler = state.npcHandler;
+            this.map = (HashMap<LocalPoint, TargetTile>) tileMap.getMap();
+        }
+    }
+
+    public void updateState(){
+        if (state != null) {
+            state.refreshState();
+            this.config = state.config;
+            this.tileMap = state.tileMap;
+            this.map = (HashMap<LocalPoint, TargetTile>) tileMap.getMap();
+        }
+    }
+
+    public State getState() {
+        return state;
+    }
 }
 

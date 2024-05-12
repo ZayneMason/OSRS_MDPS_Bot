@@ -2,7 +2,6 @@ version = "1.0.1"
 
 project.extra["PluginName"] = "Zayne MDPS"
 project.extra["PluginDescription"] = "MDPS experiment for tile selection"
-
 tasks {
     jar {
         manifest {

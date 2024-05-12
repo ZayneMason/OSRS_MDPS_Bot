@@ -1,31 +1,70 @@
 package com.zayneiacplugs.zaynemdps;
 
+import com.google.inject.Provides;
 import net.runelite.api.Client;
-import net.runelite.api.CollisionDataFlag;
 import net.runelite.api.NPC;
-import net.runelite.api.Point;
 import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.coords.WorldArea;
 import net.runelite.api.coords.WorldPoint;
-import net.runelite.client.plugins.groundmarkers.GroundMarkerOverlay;
-import net.runelite.client.plugins.wiki.WikiPlugin;
 import net.unethicalite.api.entities.NPCs;
 import net.unethicalite.api.utils.MessageUtils;
 
+import javax.inject.Inject;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
+import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 public class NPCHandler {
-    private volatile List<NPC> cachedNPCs = new ArrayList<>();
-    private volatile List<NPCConfig> cachedNPCConfigs = new ArrayList<>();
+    private final ZayneMDPSConfig config;
+    public volatile List<NPCConfig> cachedNPCConfigs;
+    private volatile List<NPC> cachedNPCs;
+    private volatile List<EnhancedNPC> enhancedNPCS;
 
-    public void updateNPCs(java.util.List<NPC> npcs) {
-        cachedNPCs = npcs;
+    @Inject
+    public NPCHandler(ZayneMDPSConfig config) {
+        this.config = config;
+        this.enhancedNPCS = new ArrayList<>();
+        this.cachedNPCConfigs = parseNPCConfig(config);
+    }
+
+    public void updateNPCs() {
+        List<EnhancedNPC> compareList = generateEnhancedNPCList(false);
+        for (EnhancedNPC newNPC : compareList){
+            if (!getEnhancedNPCIds(enhancedNPCS).contains(newNPC.getUniqueId())) enhancedNPCS.add(newNPC);
+        }
+        for (EnhancedNPC enhancedNPC : enhancedNPCS) {
+            if (!getEnhancedNPCIds(compareList).contains(enhancedNPC.getUniqueId())) {
+                enhancedNPCS.remove(enhancedNPC);
+                continue;
+            }
+            enhancedNPC.updateLocation();
+            //enhancedNPC.updateHitpoints();
+        }
+    }
+
+    private List<Integer> getEnhancedNPCIds(List<EnhancedNPC> enhancedNPCList) {
+        List<Integer> idList = new ArrayList<>();
+        for (EnhancedNPC enhancedNPC : enhancedNPCList) {
+            idList.add(enhancedNPC.getUniqueId());
+        }
+        return idList;
+    }
+
+    private List<EnhancedNPC> generateEnhancedNPCList(boolean getStats) {
+        List<EnhancedNPC> enhancedNPCSList = new ArrayList<>();
+        for (NPCConfig npcConfig : cachedNPCConfigs) {
+            for (NPC npc : NPCs.getAll(npcConfig.getName())) {
+                enhancedNPCSList.add(new EnhancedNPC(npc, npcConfig, getStats));
+            }
+        }
+        return enhancedNPCSList;
     }
 
     public void updateNPCConfig(List<NPCConfig> npcConfigs) {
-        cachedNPCConfigs = npcConfigs;
+        if (cachedNPCConfigs != npcConfigs) {
+            cachedNPCConfigs = npcConfigs;
+        }
     }
 
     public List<NPC> getCachedNPCs() {
@@ -41,21 +80,26 @@ public class NPCHandler {
         return null;
     }
 
-    public void handleNPCPosition(NPC npc, NPCConfig configNPC, TileMap tileMap, Client client) {
-        WorldArea npcArea = npc.getWorldArea();
-        int attackRange = configNPC.getRange();
+    public List<NPCConfig> getCachedNPCConfigs() {
+        return cachedNPCConfigs;
+    }
+
+    public void handleNPCPosition(EnhancedNPC npc, TileMap tileMap, Client client) {
+        WorldArea npcArea = npc.getNpc().getWorldArea();
+        if (npcArea == null) MessageUtils.addMessage("Null npc area");
+        int attackRange = npc.getNpcConfig().getRange();
         WorldArea extendedArea = new WorldArea(
-                npcArea.getX() - configNPC.config().overlayRange(),
-                npcArea.getY() - configNPC.config().overlayRange(),
-                npcArea.getWidth() + 2 * configNPC.config().overlayRange(),
-                npcArea.getHeight() + 2 * configNPC.config().overlayRange(),
+                npcArea.getX() - config.overlayRange(),
+                npcArea.getY() - config.overlayRange(),
+                npcArea.getWidth() + 2 * config.overlayRange(),
+                npcArea.getHeight() + 2 * config.overlayRange(),
                 npcArea.getPlane()
         );
 
         for (WorldPoint worldPoint : extendedArea.toWorldPointList()) {
             WorldPoint point = new WorldPoint(worldPoint.getX(), worldPoint.getY(), npcArea.getPlane());
             LocalPoint localPoint = LocalPoint.fromWorld(client, point);
-            boolean flagHasLineOfSight = hasLineOfSight(npcArea.toWorldPoint(), point, client);
+            boolean flagHasLineOfSight = ZayneUtils.hasLineOfSight(npcArea.toWorldPoint(), point, client);
             boolean tileIsUnderNPC = point.isInArea2D(npcArea);
 
             if (tileIsUnderNPC) {
@@ -64,10 +108,10 @@ public class NPCHandler {
                 continue;
             }
             if (localPoint != null && flagHasLineOfSight) {
-                double distance = calculateDistance(npcArea, point, configNPC.getAttackStyle());
+                double distance = calculateDistance(npcArea, point, npc.getNpcConfig().getAttackStyle());
                 if (distance <= attackRange) {
                     // In attack range in los, attack style and los
-                    tileMap.addTile(localPoint, npc, configNPC.getAttackStyle(), true);
+                    tileMap.addTile(localPoint, npc, npc.getNpcConfig().getAttackStyle(), true);
                 } else {
                     // has los, not in attack range
                     tileMap.addTile(localPoint, npc, ZayneMDPSConfig.Option.OUT_OF_RANGE_IN_LOS, true);
@@ -109,87 +153,19 @@ public class NPCHandler {
         return minDistance;
     }
 
-    public boolean hasLineOfSight(WorldPoint from, WorldPoint to, Client client) {
-        if (from.getPlane() != to.getPlane()) {
-            return false;
-        }
-
-        List<net.runelite.api.Point> linePoints = bresenhamLine(from.getX(), from.getY(), to.getX(), to.getY());
-        int plane = from.getPlane();
-        int[][] flags = Objects.requireNonNull(client.getCollisionMaps())[plane].getFlags();
-
-        for (net.runelite.api.Point p : linePoints) {
-            int x = p.getX() - client.getBaseX();
-            int y = p.getY() - client.getBaseY();
-
-            if (x < 0 || y < 0 || x >= 104 || y >= 104) {
-                continue;
-            }
-
-            int flag = flags[x][y];
-            if (isObstacle(flag)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private boolean isObstacle(int flag) {
-        return (flag & CollisionDataFlag.BLOCK_MOVEMENT_FULL) != 0 ||
-                (flag & CollisionDataFlag.BLOCK_MOVEMENT_OBJECT) != 0 ||
-                (flag & CollisionDataFlag.BLOCK_LINE_OF_SIGHT_FULL) != 0 ||
-                (flag & CollisionDataFlag.BLOCK_LINE_OF_SIGHT_EAST) != 0 ||
-                (flag & CollisionDataFlag.BLOCK_LINE_OF_SIGHT_WEST) != 0 ||
-                (flag & CollisionDataFlag.BLOCK_LINE_OF_SIGHT_NORTH) != 0 ||
-                (flag & CollisionDataFlag.BLOCK_LINE_OF_SIGHT_SOUTH) != 0;
-    }
-
-    private List<net.runelite.api.Point> bresenhamLine(int x0, int y0, int x1, int y1) {
-        List<net.runelite.api.Point> points = new ArrayList<>();
-
-        int dx = Math.abs(x1 - x0);
-        int dy = Math.abs(y1 - y0);
-        int sx = x0 < x1 ? 1 : -1;
-        int sy = y0 < y1 ? 1 : -1;
-        int err = dx - dy;
-        int e2;
-
-        while (true) {
-            points.add(new Point(x0, y0));
-
-            if (x0 == x1 && y0 == y1) {
-                break;
-            }
-
-            e2 = 2 * err;
-            if (e2 > -dy) {
-                err -= dy;
-                x0 += sx;
-            }
-            if (e2 < dx) {
-                err += dx;
-                y0 += sy;
-            }
-        }
-
-        return points;
+    public List<EnhancedNPC> getEnhancedNPCS() {
+        return enhancedNPCS;
     }
 
     public void process(Client client, ZayneMDPSConfig config, TileMap tileMap) {
-        List<NPC> npcs = new ArrayList<>();
-        List<NPCConfig> npcConfigs = parseNPCConfig(config.npcList(), config);
-        for (NPCConfig npcConfig : npcConfigs) {
-            npcs.addAll(NPCs.getAll(npcConfig.getName()));
-        }
-
-        this.updateNPCs(npcs);
-        this.updateNPCConfig(npcConfigs);
-        for (NPC cachedNPC : cachedNPCs) handleNPCPosition(cachedNPC, getConfigForNPC(cachedNPC), tileMap, client);
+        this.updateNPCConfig(parseNPCConfig(config));
+        this.updateNPCs();
+        for (EnhancedNPC enhancedNPC : enhancedNPCS) handleNPCPosition(enhancedNPC, tileMap, client);
     }
 
-    public List<NPCConfig> parseNPCConfig(String configString, ZayneMDPSConfig config) {
+    private List<NPCConfig> parseNPCConfig(ZayneMDPSConfig config) {
         List<NPCConfig> configs = new ArrayList<>();
-        String[] npcEntries = configString.split(";");
+        String[] npcEntries = this.config.npcList().split(";");
         for (String entry : npcEntries) {
             String[] details = entry.split(",");
             if (details.length == 3) {
@@ -202,7 +178,7 @@ public class NPCHandler {
                     MessageUtils.addMessage("Invalid range: " + details[2]);
                     continue; // Skip this entry if the range is not a valid integer
                 }
-                configs.add(new NPCConfig(name, style, range, config));
+                configs.add(new NPCConfig(name, style, range, this.config));
             }
         }
         if (configs.isEmpty()) {

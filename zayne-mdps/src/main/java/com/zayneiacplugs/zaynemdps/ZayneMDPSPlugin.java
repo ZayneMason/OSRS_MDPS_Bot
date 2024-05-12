@@ -2,7 +2,6 @@ package com.zayneiacplugs.zaynemdps;
 
 import com.google.inject.Provides;
 import net.runelite.api.Client;
-import net.runelite.api.NPC;
 import net.runelite.api.events.ClientTick;
 import net.runelite.api.events.GameTick;
 import net.runelite.client.callback.ClientThread;
@@ -15,7 +14,6 @@ import net.unethicalite.api.utils.MessageUtils;
 import org.pf4j.Extension;
 
 import javax.inject.Inject;
-import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.logging.Logger;
 
@@ -37,10 +35,8 @@ public class ZayneMDPSPlugin extends Plugin {
     private ClientThread clientThread;
     @Inject
     private ZayneMDPSConfig config;
-    private TileMap tileMap;
     @Inject
     private ZayneMDPSOverlay overlay;
-    private NPCHandler npcHandler;
     private ClientTick clientTick;
     private State state;
 
@@ -57,11 +53,6 @@ public class ZayneMDPSPlugin extends Plugin {
 
     @Override
     protected void startUp() throws Exception {
-        this.tileMap = new TileMap(config);
-        this.npcHandler = new NPCHandler();
-        this.overlay = new ZayneMDPSOverlay(client, config, tileMap, npcHandler);
-        List<NPCConfig> npcConfigs = npcHandler.parseNPCConfig(config.npcList(), config);
-        this.state = new State(client, tileMap, npcHandler, npcConfigs);
         overlayManager.add(overlay);
         MessageUtils.addMessage("Zayne MDPS Plugin started.");
     }
@@ -69,15 +60,21 @@ public class ZayneMDPSPlugin extends Plugin {
     @Override
     protected void shutDown() throws Exception {
         overlayManager.remove(overlay);
-        npcHandler.getCachedNPCs().clear();
+        state.clearState();
         MessageUtils.addMessage("Zayne MDPS Plugin stopped.");
         executor.shutdown();
     }
 
     @Subscribe
     public void onGameTick(GameTick tick) {
-        state.refreshState();
+        if (state == null) {
+            MessageUtils.addMessage("Null ahh shit bruh");
+            if (overlay.getState() == null) {
+                this.state = new State(client, new TileMap(config), new NPCHandler(config));
+                this.overlay.addState(state);
+            }
+        } else {
+            overlay.updateState();
+        }
     }
-
-
 }
