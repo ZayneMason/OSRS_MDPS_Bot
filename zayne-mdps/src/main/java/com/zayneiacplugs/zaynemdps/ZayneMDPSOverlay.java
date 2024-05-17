@@ -2,7 +2,6 @@ package com.zayneiacplugs.zaynemdps;
 
 import com.google.common.base.Strings;
 import net.runelite.api.Client;
-import net.runelite.api.NPC;
 import net.runelite.api.Perspective;
 import net.runelite.api.Point;
 import net.runelite.api.coords.LocalPoint;
@@ -16,72 +15,117 @@ import net.unethicalite.api.utils.MessageUtils;
 import javax.annotation.Nullable;
 import javax.inject.Inject;
 import java.awt.*;
-import java.util.HashMap;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
 
 import static net.runelite.client.ui.overlay.OverlayPriority.LOW;
 
 public class ZayneMDPSOverlay extends Overlay {
+    @Inject
     private Client client;
+    @Inject
     private ZayneMDPSConfig config;
-    private NPCHandler npcHandler;
-    private HashMap<LocalPoint, TargetTile> map;
     private State state;
-    private volatile TileMap tileMap;
+    private ExecutorService executorService;
+    private boolean stateUpdated;
 
     @Inject
     public ZayneMDPSOverlay() {
         setPosition(OverlayPosition.DYNAMIC);
         setPriority(LOW);
-        setLayer(OverlayLayer.UNDER_WIDGETS);
+        setLayer(OverlayLayer.ABOVE_SCENE);
+
     }
 
     @Override
     public Dimension render(Graphics2D graphics) {
-        for (EnhancedNPC npc : npcHandler.getEnhancedNPCS()) {
-            drawNPCInfo(graphics, npc);
-        }
-            if (state.getUpToDate()) {
-                for (TargetTile targetTile : map.values()) {
-                    renderTile(graphics, targetTile);
+        if (state != null && state.config != null && state.config.fillTiles()) {
+            Graphics2D g2dForNPCs = (Graphics2D) graphics.create();
+            Graphics2D g2dForTiles = (Graphics2D) graphics.create();
+            try {
+                if (state.isUpToDate()) {
+                    renderTiles(g2dForTiles, state.tileMap);
+                    renderNPCs(g2dForNPCs);
+                } else {
+                    renderTiles(g2dForTiles, state.cachedTileMap);
+                    renderNPCs(g2dForNPCs);
                 }
+            } catch (Exception e) {
+                MessageUtils.addMessage(e.getMessage());
+            } finally {
+                g2dForNPCs.dispose();
+                g2dForTiles.dispose();
             }
-
-            return null;
+        }
+        return null;
     }
 
+    private void renderNPCs(Graphics2D graphics) {
+        for (EnhancedNPC npc : state.npcHandler.getEnhancedNPCS()) {
+            if (npc == null) {
+                continue;
+            }
+            drawNPCInfo(graphics, npc);
+        }
+    }
+
+    private void renderTiles(Graphics2D graphics, TileMap tileMap) {
+        if (tileMap == null || tileMap.getMap().keySet().isEmpty()) {
+            return;
+        }
+        for (TargetTile targetTile : tileMap.getMap().values()) {
+            if (targetTile == null) {
+                continue;
+            }
+            if (state.playerTiles.contains(targetTile.getLocalPoint())) {
+                renderTile(graphics, targetTile);
+            }
+        }
+    }
+
+
     private void drawNPCInfo(Graphics2D graphics, EnhancedNPC npc) {
-        OverlayUtil.renderActorParagraph(graphics, npc.getNpc(), npc.getNpcConfig().getName() + npc.getUniqueId(), Color.BLACK);
+        OverlayUtil.renderActorParagraph(graphics, npc.getNpc(), npc.getNpcConfig().getName() + npc.getMonsterStats().getHitpoints() , Color.BLACK);
     }
 
     private void renderTile(Graphics2D graphics, TargetTile targetTile) {
-        if (targetTile == null || client == null) {
-            MessageUtils.addMessage("targetTile or client is null");
+        if (targetTile == null) {
+            return;
+        }
+        if (graphics == null) {
+            return;
+        }
+        if (client == null) {
             return;
         }
         Polygon poly = Perspective.getCanvasTilePoly(client, targetTile.getLocalPoint());
         if (poly == null) {
-            MessageUtils.addMessage("Unable to compute polygon for tile");
             return;
         }
-        if (config.fillTiles()) renderAttackStyles(graphics, targetTile, poly);
+        if (config == null) {
+            return;
+        }
+        renderAttackStyles(graphics, targetTile, poly);
     }
 
     private void renderAttackStyles(Graphics2D graphics, TargetTile tile, Polygon poly) {
-        if (tile.getDamageTypes() == null){
-            MessageUtils.addMessage("damageTypes null at renderAttackStyles");
+        if (tile.getDamageTypes() == null) {
+            return;
         }
         Set<ZayneMDPSConfig.Option> relevantDamageTypes = tile.getDamageTypes().stream()
                 .filter(dt -> dt != ZayneMDPSConfig.Option.OUT_OF_RANGE_IN_LOS && dt != ZayneMDPSConfig.Option.OUT_OF_RANGE_OUT_LOS)
                 .collect(Collectors.toSet());
+        if (relevantDamageTypes == null) {
+            return;
+        }
         // Get the distinct colors from the filtered damage types
         Set<Color> distinctColors = relevantDamageTypes.stream()
                 .map(this::getAttackColor)  // Convert each damage type to its color
                 .collect(Collectors.toSet());
 
-        if (distinctColors == null){
-            MessageUtils.addMessage("distictColors null at renderAttackStyles");
+        if (distinctColors == null) {
+            return;
         }
         int total = distinctColors.size();
         if (total > 0) {
@@ -152,6 +196,8 @@ public class ZayneMDPSOverlay extends Overlay {
                 return config.inLoSColor();
             case OUT_OF_RANGE_OUT_LOS:
                 return config.outLoSColor();
+            case SPOT_ANIM:
+                return Color.red;
         }
         return Color.BLACK;
     }
@@ -191,30 +237,9 @@ public class ZayneMDPSOverlay extends Overlay {
     }
 
     public void addState(State state) {
-        if (this.state == null) {
-            this.state = state;
-            this.client = state.client;
-            this.config = state.config;
-            this.tileMap = state.tileMap;
-            if (tileMap == null){
-                MessageUtils.addMessage("Tile map null");
-            }
-            this.npcHandler = state.npcHandler;
-            this.map = (HashMap<LocalPoint, TargetTile>) tileMap.getMap();
-        }
-    }
-
-    public void updateState(){
-        if (state != null) {
-            state.refreshState();
-            this.config = state.config;
-            this.tileMap = state.tileMap;
-            this.map = (HashMap<LocalPoint, TargetTile>) tileMap.getMap();
-        }
-    }
-
-    public State getState() {
-        return state;
+        this.state = state;
+        this.client = state.client;
+        this.config = state.config;
     }
 }
 

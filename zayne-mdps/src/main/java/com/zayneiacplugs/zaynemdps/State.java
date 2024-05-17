@@ -1,69 +1,254 @@
 package com.zayneiacplugs.zaynemdps;
 
-import net.runelite.api.Client;
-import net.runelite.api.NPC;
-import net.runelite.api.Skill;
-import net.runelite.api.VarPlayer;
+import com.google.inject.Inject;
+import net.runelite.api.*;
 import net.runelite.api.coords.LocalPoint;
+import net.runelite.api.coords.WorldArea;
+import net.runelite.api.coords.WorldPoint;
+import net.unethicalite.api.utils.MessageUtils;
 
-import javax.inject.Inject;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class State {
+    private final ZayneMDPSOverlay overlay;
+    private ItemContainer playerInventory;
     public Client client;
+    @Inject
     public ZayneMDPSConfig config;
     public TileMap tileMap;
-    public Map<LocalPoint, TargetTile> mapOfTiles;
     public NPCHandler npcHandler;
-    public List<NPC> npcs;
-    public NPCConfig npcConfig;
+    public List<EnhancedNPC> npcs;
     public List<NPCConfig> npcConfigs;
-    private int playerHealth;
-    private LocalPoint playerLocation;
-    private double dps;
-    private int playerRunEnergy;
-    private int playerSpecialAttackEnergy;
-    private int playerPrayerPoints;
-    private int tick;
-    private boolean upToDate;
+    public int playerHealth;
+    public LocalPoint playerLocation;
+    public double dps;
+    public int playerRunEnergy;
+    public int playerSpecialAttackEnergy;
+    public int playerPrayerPoints;
+    public int tick;
+    public AtomicBoolean upToDate = new AtomicBoolean(false);
+    public WorldArea playerArea;
+    public List<LocalPoint> playerTiles;
+    public TileMap cachedTileMap;
+    private int ticksUntilPlayerAttack;
+    private Item[] inventoryItems;
+    private static final HashMap<Integer, Integer> healingValues = new HashMap<Integer, Integer>();
+    private static final HashMap<Integer, Integer> prayerRestoreValues = new HashMap<Integer, Integer>();
+    private int totalHeals;
+    private int totalPrayerRestore;
 
     @Inject
-    public State(Client client, TileMap tileMap, NPCHandler npcHandler) {
+    public State(Client client, ZayneMDPSConfig config, ZayneMDPSOverlay overlay) throws IOException {
+        this.config = config;
         this.client = client;
-        this.playerLocation = client.getLocalPlayer().getLocalLocation();
-        this.playerHealth = client.getBoostedSkillLevel(Skill.HITPOINTS);
-        this.playerPrayerPoints = client.getBoostedSkillLevel(Skill.PRAYER);
-        this.playerRunEnergy = client.getEnergy();
-        this.playerSpecialAttackEnergy = client.getVarpValue(VarPlayer.SPECIAL_ATTACK_PERCENT);
-        this.tileMap = tileMap;
-        this.npcHandler = npcHandler;
-        npcHandler.process(client, config, tileMap);
-        this.npcs = npcHandler.getCachedNPCs();
-        this.npcConfigs = npcHandler.getCachedNPCConfigs();
-        this.mapOfTiles = tileMap.getMap();
+        this.tileMap = new TileMap(this);
+        this.npcHandler = new NPCHandler(this);
+        this.overlay = overlay;
+        this.playerArea = getPlayerArea();
+        this.playerTiles = getPlayerTiles();
+        this.playerInventory = client.getItemContainer(InventoryID.INVENTORY);
+        this.inventoryItems = playerInventory != null ? playerInventory.getItems() : new Item[0];
+        initializeState();
+        refreshState();
+        this.cachedTileMap = tileMap;
+    }
+
+    private WorldArea getPlayerArea() {
+        return client.getLocalPlayer().getWorldArea();
     }
 
     public void refreshState() {
-        this.tileMap.clean();
-        this.npcHandler.process(client, config, tileMap);
-        this.mapOfTiles = tileMap.getMap();
-        this.playerLocation = client.getLocalPlayer().getLocalLocation();
-        this.playerHealth = client.getRealSkillLevel(Skill.HITPOINTS);
-        this.playerPrayerPoints = client.getBoostedSkillLevel(Skill.PRAYER);
-        this.playerRunEnergy = client.getEnergy();
-        this.playerSpecialAttackEnergy = client.getVarpValue(VarPlayer.SPECIAL_ATTACK_PERCENT);
-        this.upToDate = true;
+        long startTime = System.currentTimeMillis();
+        try {
+            updatePlayerInfo();
+            processState();
+            cachedTileMap = tileMap.clone(this);
+            stateUpdated();
+
+            this.npcs = npcHandler.getEnhancedNPCS();
+            this.npcConfigs = npcHandler.getCachedNPCConfigs();
+
+        } catch (Exception e) {
+            upToDate.set(false);
+        }
+        long endTime = System.currentTimeMillis();
+        MessageUtils.addMessage("State processed in " + (endTime - startTime));
     }
 
-    public boolean getUpToDate(){
-        return this.upToDate;
+    private void updatePlayerInfo() {
+        WorldArea newPlayerArea = getPlayerArea();
+        if (!this.playerArea.equals(newPlayerArea)) {
+            this.playerArea = newPlayerArea;
+            this.playerTiles = getPlayerTiles();
+            this.playerArea = getPlayerArea();
+            this.playerTiles = getPlayerTiles();
+            this.playerInventory = client.getItemContainer(InventoryID.INVENTORY);
+            this.inventoryItems = playerInventory != null ? playerInventory.getItems() : new Item[0];
+            this.playerHealth = client.getBoostedSkillLevel(Skill.HITPOINTS);
+            this.totalHeals = getHeals();
+            this.playerPrayerPoints = client.getBoostedSkillLevel(Skill.PRAYER);
+            this.totalPrayerRestore = getPrayerRestores();
+            this.playerRunEnergy = client.getEnergy();
+            this.playerSpecialAttackEnergy = client.getVarpValue(VarPlayer.SPECIAL_ATTACK_PERCENT) / 10;
+        }
     }
 
-    public void clearState(){
-        this.tileMap.clean();
-        this.npcHandler.getCachedNPCConfigs().clear();
-        this.npcHandler.getCachedNPCs().clear();
-        this.npcHandler.getEnhancedNPCS().clear();
+    private int getPrayerRestores() {
+        int sum = 0;
+        for (Item item : inventoryItems) {
+            if (item != null && prayerRestoreValues.containsKey(item.getId())) {
+                sum += prayerRestoreValues.get(item.getId());
+            }
+        }
+        return sum;
+    }
+
+    private int getHeals() {
+        int sum = 0;
+        for (Item item : inventoryItems) {
+            if (item != null && healingValues.containsKey(item.getId())) {
+                sum += healingValues.get(item.getId());
+            }
+        }
+        return sum;
+    }
+
+    private void stateUpdated(){
+        setUpToDate(false);
+        tileMap.stateUpdated(this);
+    }
+
+    private void processState() {
+        long startTime = System.nanoTime();
+        upToDate.set(false);
+        tileMap.stateProcessing(this);
+        npcHandler.stateProcessing(this);
+        long endTime = System.nanoTime();
+    }
+
+    private void initializeState() {
+        long startTime = System.nanoTime();
+        tileMap.stateInitialized(this);
+        npcHandler.stateInitialized(this);
+        populateHealPrayerValues();
+        long endTime = System.nanoTime();
+    }
+
+    public boolean isUpToDate() {
+        return upToDate.get();
+    }
+
+    public void setUpToDate(boolean isUpToDate) {
+        upToDate.set(isUpToDate);
+    }
+
+    public synchronized void clearState() throws IOException {
+        tileMap.clean(getPlayerTiles());
+        npcHandler.clearCache();  // Assumes a clearCache method in NPCHandler
+    }
+
+    private List<LocalPoint> getPlayerTiles() {
+        WorldArea worldArea = new WorldArea(
+                client.getLocalPlayer().getWorldArea().getX() - config.overlayRange(),
+                client.getLocalPlayer().getWorldArea().getY() - config.overlayRange(),
+                1 + (2 * config.overlayRange()),
+                1 + (2 * config.overlayRange()),
+                client.getLocalPlayer().getWorldArea().getPlane()
+        );
+        List<WorldPoint> playerTiles = new ArrayList<>();
+        for (WorldPoint worldPoint : worldArea.toWorldPointList()) {
+            if (ZayneUtils.validTile(client.getLocalPlayer().getWorldLocation(), worldPoint, client)) {
+                playerTiles.add(worldPoint);
+            }
+        }
+        List<LocalPoint> localPlayerTiles = new ArrayList<>();
+        for (WorldPoint worldPoint : playerTiles) {
+            localPlayerTiles.add(LocalPoint.fromWorld(client, worldPoint));
+        }
+        return localPlayerTiles;
+    }
+
+    public List<EnhancedNPC> getNpcs() {
+        return this.npcs;
+    }
+
+    public int getPlayerHealth() {
+        return this.playerHealth;
+    }
+
+    public int getRunEnergy() {
+        return this.playerRunEnergy / 100;
+    }
+
+    public int getPlayerSpecialAttackEnergy(){
+        return this.playerSpecialAttackEnergy;
+    }
+
+    public int getTicksUntilNextNPCAttack() {
+        return 1;
+    }
+
+    public int getTicksUntilNextPlayerAttack() { return this.ticksUntilPlayerAttack; }
+
+    public String getTypeOfAttack() {
+        return ZayneMDPSConfig.Option.MAGE.toString();
+    }
+
+    public ItemContainer getPlayerInventory() {
+        return this.playerInventory;
+    }
+
+    private void populateHealPrayerValues(){
+        healingValues.put(ItemID.SHARK, 20);
+        healingValues.put(ItemID.MONKFISH, 16);
+        healingValues.put(ItemID.ANGLERFISH, 22);
+        healingValues.put(ItemID.SARADOMIN_BREW1, (client.getRealSkillLevel(Skill.HITPOINTS) * 15/100) + 2);
+        healingValues.put(ItemID.SARADOMIN_BREW2, healingValues.get(ItemID.SARADOMIN_BREW1) * 2);
+        healingValues.put(ItemID.SARADOMIN_BREW3, healingValues.get(ItemID.SARADOMIN_BREW1) * 3);
+        healingValues.put(ItemID.SARADOMIN_BREW4, healingValues.get(ItemID.SARADOMIN_BREW1) * 4);
+        
+        prayerRestoreValues.put(ItemID.PRAYER_POTION1,
+                hasHolyWrenchItem() ? (client.getRealSkillLevel(Skill.PRAYER) * 27/100) + 8 :
+                (client.getRealSkillLevel(Skill.PRAYER) * 27/100) + 7
+        );
+        prayerRestoreValues.put(ItemID.PRAYER_POTION2, prayerRestoreValues.get(ItemID.PRAYER_POTION1) * 2);
+        prayerRestoreValues.put(ItemID.PRAYER_POTION3, prayerRestoreValues.get(ItemID.PRAYER_POTION1) * 3);
+        prayerRestoreValues.put(ItemID.PRAYER_POTION4, prayerRestoreValues.get(ItemID.PRAYER_POTION1) * 4);
+        prayerRestoreValues.put(ItemID.SUPER_RESTORE1, prayerRestoreValues.get(ItemID.PRAYER_POTION1) + 1);
+        prayerRestoreValues.put(ItemID.SUPER_RESTORE2, prayerRestoreValues.get(ItemID.SUPER_RESTORE1) * 2);
+        prayerRestoreValues.put(ItemID.SUPER_RESTORE3, prayerRestoreValues.get(ItemID.SUPER_RESTORE1) * 3);
+        prayerRestoreValues.put(ItemID.SUPER_RESTORE4, prayerRestoreValues.get(ItemID.SUPER_RESTORE1) * 4);
+
+    }
+
+    public boolean hasHolyWrenchItem() {
+        for (Item item : inventoryItems) {
+            if (item != null && (item.getId() == ItemID.HOLY_WRENCH ||
+                    item.getId() == ItemID.PRAYER_CAPE ||
+                    item.getId() == ItemID.MAX_CAPE ||
+                    item.getId() == ItemID.RING_OF_THE_GODS ||
+                    item.getId() == ItemID.RING_OF_THE_GODS_I
+            )) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public int getTotalHeals() {
+        return totalHeals;
+    }
+
+    public int getTotalPrayerRestore(){
+        return totalPrayerRestore;
+    }
+
+    public int getPlayerPrayerPoints() {
+        return playerPrayerPoints;
     }
 }

@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.Objects;
 
 public interface ZayneUtils {
-    public static boolean hasLineOfSight(WorldPoint from, WorldPoint to, Client client) {
+    static boolean hasLineOfSight(WorldPoint from, WorldPoint to, Client client) {
         if (from.getPlane() != to.getPlane()) {
             return false;
         }
@@ -35,17 +35,17 @@ public interface ZayneUtils {
         return true;
     }
 
-    public static boolean isObstacle(int flag) {
+    static boolean isObstacle(int flag) {
         return (flag & CollisionDataFlag.BLOCK_MOVEMENT_FULL) != 0 ||
-                (flag & CollisionDataFlag.BLOCK_MOVEMENT_OBJECT) != 0 ||
-                (flag & CollisionDataFlag.BLOCK_LINE_OF_SIGHT_FULL) != 0 ||
-                (flag & CollisionDataFlag.BLOCK_LINE_OF_SIGHT_EAST) != 0 ||
-                (flag & CollisionDataFlag.BLOCK_LINE_OF_SIGHT_WEST) != 0 ||
-                (flag & CollisionDataFlag.BLOCK_LINE_OF_SIGHT_NORTH) != 0 ||
-                (flag & CollisionDataFlag.BLOCK_LINE_OF_SIGHT_SOUTH) != 0;
+                (flag & CollisionDataFlag.BLOCK_LINE_OF_SIGHT_FULL) != 0;
     }
 
-    public static List<net.runelite.api.Point> bresenhamLine(int x0, int y0, int x1, int y1) {
+    static boolean isMovementObstacle(int flag) {
+        return (flag & CollisionDataFlag.BLOCK_MOVEMENT_FULL) != 0 ||
+                (flag & CollisionDataFlag.BLOCK_MOVEMENT_OBJECT) != 0;
+    }
+
+    static List<net.runelite.api.Point> bresenhamLine(int x0, int y0, int x1, int y1) {
         List<net.runelite.api.Point> points = new ArrayList<>();
 
         int dx = Math.abs(x1 - x0);
@@ -76,5 +76,28 @@ public interface ZayneUtils {
         return points;
     }
 
+    static boolean validTile(WorldPoint from, WorldPoint to, Client client) {
+        if (from.getPlane() != to.getPlane()) {
+            return false;
+        }
 
+        List<Point> linePoints = bresenhamLine(from.getX(), from.getY(), to.getX(), to.getY());
+        int plane = from.getPlane();
+        int[][] flags = Objects.requireNonNull(client.getCollisionMaps())[plane].getFlags();
+
+        for (net.runelite.api.Point p : linePoints) {
+            int x = p.getX() - client.getBaseX();
+            int y = p.getY() - client.getBaseY();
+
+            if (x < 0 || y < 0 || x >= 104 || y >= 104) {
+                continue;
+            }
+
+            int flag = flags[x][y];
+            if (isMovementObstacle(flag)) {
+                return false;
+            }
+        }
+        return true;
+    }
 }

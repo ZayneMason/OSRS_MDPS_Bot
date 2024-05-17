@@ -53,6 +53,7 @@ allprojects {
         compileOnly(Libraries.javax)
         compileOnly(Libraries.lombok)
         compileOnly(Libraries.pf4j)
+        compileOnly(Libraries.json)
     }
 
     configure<JavaPluginConvention> {

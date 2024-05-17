@@ -41,6 +41,7 @@ object Libraries {
         const val rxjava = "3.1.2"
     }
 
+    const val json = "org.json:json:20140107"
     const val guice = "com.google.inject:guice:${Versions.guice}"
     const val javax = "javax.annotation:javax.annotation-api:${Versions.javax}"
     const val lombok = "org.projectlombok:lombok:${Versions.lombok}"

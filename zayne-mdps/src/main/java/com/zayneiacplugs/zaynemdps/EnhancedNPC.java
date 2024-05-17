@@ -2,25 +2,31 @@ package com.zayneiacplugs.zaynemdps;
 
 import net.runelite.api.NPC;
 import net.runelite.api.coords.LocalPoint;
+import net.runelite.api.events.GameTick;
 import net.runelite.client.game.NpcInfo;
+import net.unethicalite.api.utils.MessageUtils;
 
-public class EnhancedNPC extends NpcInfo {
+import java.util.ArrayList;
+import java.util.EventListener;
+import java.util.List;
+
+public class EnhancedNPC extends GameTick {
+    private final int uniqueId;
+    private final NPC npc;
+    private final NPCConfig npcConfig;
     private LocalPoint location;
-    private int uniqueId;
     private int health = 0;
     private int ticksUntilAttack;
     private MonsterStats monsterStats;
-    private NPC npc;
-    private NPCConfig npcConfig;
 
-    public EnhancedNPC(NPC npc, NPCConfig npcConfig, boolean getStats) {
-        super();
+    public EnhancedNPC(NPC npc, NPCConfig npcConfig, boolean getStats, int id) {
         this.npc = npc;
         this.location = npc.getLocalLocation();
         this.npcConfig = npcConfig;
-        this.uniqueId = npc.getIndex();
-        if (getStats) this.health = npcConfig.getMonsterStats().getHitpoints();
+        this.uniqueId = id;
+        this.health = 1;
         this.ticksUntilAttack = 10;  // Example default value
+        this.monsterStats = npcConfig.getMonsterStats();
     }
 
     public int getUniqueId() {
@@ -52,7 +58,13 @@ public class EnhancedNPC extends NpcInfo {
     }
 
     public void updateLocation() {
-        this.location = npc.getLocalLocation();
+        if (npc.getLocalLocation() != location){
+            location = npc.getLocalLocation();
+        }
+    }
+
+    public MonsterStats getMonsterStats(){
+        return monsterStats;
     }
 
 //    public void updateHitpoints() {

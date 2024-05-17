@@ -1,21 +1,24 @@
 package com.zayneiacplugs.zaynemdps;
 
-import javax.inject.Inject;
+import net.unethicalite.api.utils.MessageUtils;
+
 import java.awt.*;
+import java.io.IOException;
 
 public class NPCConfig {
     private final String name;
     private final String attackStyle;
     private final int range;
-    private ZayneMDPSConfig config;
-    private MonsterStats monsterStats;
+    private final ZayneMDPSConfig config;
+    public MonsterStats monsterStats = null;
 
-    public NPCConfig(String name, String attackStyle, int range, ZayneMDPSConfig config) {
+    public NPCConfig(String name, String attackStyle, int range, ZayneMDPSConfig config) throws IOException {
         this.name = name;
         this.attackStyle = attackStyle;
         this.range = range;
         this.config = config;
         this.monsterStats = RuneScapeWikiScraper.getMonsterStats(name);
+        MessageUtils.addMessage("Config added: " + monsterStats);
     }
 
     public String getName() {
