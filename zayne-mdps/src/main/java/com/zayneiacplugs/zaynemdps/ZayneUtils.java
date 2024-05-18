@@ -76,28 +76,18 @@ public interface ZayneUtils {
         return points;
     }
 
-    static boolean validTile(WorldPoint from, WorldPoint to, Client client) {
-        if (from.getPlane() != to.getPlane()) {
+    static boolean validTile(WorldPoint from, Client client) {
+
+        if (from.getPlane() != client.getPlane()) {
             return false;
         }
 
-        List<Point> linePoints = bresenhamLine(from.getX(), from.getY(), to.getX(), to.getY());
-        int plane = from.getPlane();
-        int[][] flags = Objects.requireNonNull(client.getCollisionMaps())[plane].getFlags();
+        int[][] flags = Objects.requireNonNull(client.getCollisionMaps())[client.getPlane()].getFlags();
 
-        for (net.runelite.api.Point p : linePoints) {
-            int x = p.getX() - client.getBaseX();
-            int y = p.getY() - client.getBaseY();
-
-            if (x < 0 || y < 0 || x >= 104 || y >= 104) {
-                continue;
-            }
+            int x = from.getX() - client.getBaseX();
+            int y = from.getY() - client.getBaseY();
 
             int flag = flags[x][y];
-            if (isMovementObstacle(flag)) {
-                return false;
-            }
-        }
-        return true;
+        return !isMovementObstacle(flag);
     }
-}
+    }

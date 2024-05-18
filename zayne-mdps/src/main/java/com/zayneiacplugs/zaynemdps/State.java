@@ -9,14 +9,14 @@ import net.unethicalite.api.utils.MessageUtils;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class State {
-    private final ZayneMDPSOverlay overlay;
-    private ItemContainer playerInventory;
+    private static final HashMap<Integer, Integer> healingValues = new HashMap<Integer, Integer>();
+    private static final HashMap<Integer, Integer> prayerRestoreValues = new HashMap<Integer, Integer>();
     public Client client;
     @Inject
     public ZayneMDPSConfig config;
@@ -33,59 +33,91 @@ public class State {
     public int tick;
     public AtomicBoolean upToDate = new AtomicBoolean(false);
     public WorldArea playerArea;
-    public List<LocalPoint> playerTiles;
+    public List<WorldPoint> playerTiles;
     public TileMap cachedTileMap;
+    private ItemContainer playerInventory;
     private int ticksUntilPlayerAttack;
     private Item[] inventoryItems;
-    private static final HashMap<Integer, Integer> healingValues = new HashMap<Integer, Integer>();
-    private static final HashMap<Integer, Integer> prayerRestoreValues = new HashMap<Integer, Integer>();
     private int totalHeals;
     private int totalPrayerRestore;
 
     @Inject
-    public State(Client client, ZayneMDPSConfig config, ZayneMDPSOverlay overlay) throws IOException {
+    public State(Client client, ZayneMDPSConfig config, ExecutorService executorService) throws IOException {
         this.config = config;
         this.client = client;
         this.tileMap = new TileMap(this);
-        this.npcHandler = new NPCHandler(this);
-        this.overlay = overlay;
+        this.npcHandler = new NPCHandler(config);
         this.playerArea = getPlayerArea();
         this.playerTiles = getPlayerTiles();
         this.playerInventory = client.getItemContainer(InventoryID.INVENTORY);
         this.inventoryItems = playerInventory != null ? playerInventory.getItems() : new Item[0];
-        initializeState();
+        tileMap.stateInitialized(this);
+        npcHandler.stateInitialized(this);
+        populateHealPrayerValues();
         refreshState();
-        this.cachedTileMap = tileMap;
     }
 
-    private WorldArea getPlayerArea() {
+    public Client getClient() {
+        return client;
+    }
+
+    public TileMap getTileMap() {
+        return tileMap;
+    }
+
+    public NPCHandler getNpcHandler() {
+        return npcHandler;
+    }
+
+    WorldArea getPlayerArea() {
         return client.getLocalPlayer().getWorldArea();
     }
 
     public void refreshState() {
         long startTime = System.currentTimeMillis();
+        MessageUtils.addMessage("refreshState: Started at " + startTime);
+
         try {
+            MessageUtils.addMessage("refreshState: Updating player info");
             updatePlayerInfo();
+            MessageUtils.addMessage("refreshState: Player info updated");
+
+            MessageUtils.addMessage("refreshState: Processing state");
             processState();
-            cachedTileMap = tileMap.clone(this);
-            stateUpdated();
+            MessageUtils.addMessage("refreshState: State processed");
 
+            MessageUtils.addMessage("refreshState: Cloning tile map");
+            cachedTileMap = tileMap.cloneTiles(this);
+            MessageUtils.addMessage("refreshState: Tile map cloned");
+
+            MessageUtils.addMessage("refreshState: Setting state as up to date");
+
+            MessageUtils.addMessage("refreshState: State set as up to date");
+
+            MessageUtils.addMessage("refreshState: Running stateUpdated");
+            MessageUtils.addMessage("refreshState: stateUpdated complete");
+
+            MessageUtils.addMessage("refreshState: Updating NPCs");
             this.npcs = npcHandler.getEnhancedNPCS();
-            this.npcConfigs = npcHandler.getCachedNPCConfigs();
+            MessageUtils.addMessage("refreshState: NPCs updated, count: " + (npcs != null ? npcs.size() : 0));
 
+            MessageUtils.addMessage("refreshState: Updating NPC configs");
+            this.npcConfigs = npcHandler.getCachedNPCConfigs();
+            MessageUtils.addMessage("refreshState: NPC configs updated, count: " + (npcConfigs != null ? npcConfigs.size() : 0));
+            setUpToDate(true);
         } catch (Exception e) {
             upToDate.set(false);
+            MessageUtils.addMessage("refreshState: Exception occurred - " + e.getMessage());
+            e.printStackTrace();
         }
+
         long endTime = System.currentTimeMillis();
-        MessageUtils.addMessage("State processed in " + (endTime - startTime));
+        MessageUtils.addMessage("refreshState: Completed at " + endTime + ", duration: " + (endTime - startTime) + " ms");
     }
 
+
     private void updatePlayerInfo() {
-        WorldArea newPlayerArea = getPlayerArea();
-        if (!this.playerArea.equals(newPlayerArea)) {
-            this.playerArea = newPlayerArea;
-            this.playerTiles = getPlayerTiles();
-            this.playerArea = getPlayerArea();
+            playerArea = getPlayerArea();
             this.playerTiles = getPlayerTiles();
             this.playerInventory = client.getItemContainer(InventoryID.INVENTORY);
             this.inventoryItems = playerInventory != null ? playerInventory.getItems() : new Item[0];
@@ -95,7 +127,6 @@ public class State {
             this.totalPrayerRestore = getPrayerRestores();
             this.playerRunEnergy = client.getEnergy();
             this.playerSpecialAttackEnergy = client.getVarpValue(VarPlayer.SPECIAL_ATTACK_PERCENT) / 10;
-        }
     }
 
     private int getPrayerRestores() {
@@ -118,24 +149,20 @@ public class State {
         return sum;
     }
 
-    private void stateUpdated(){
+    private void stateUpdated() {
         setUpToDate(false);
         tileMap.stateUpdated(this);
     }
 
     private void processState() {
-        long startTime = System.nanoTime();
         upToDate.set(false);
         tileMap.stateProcessing(this);
         npcHandler.stateProcessing(this);
-        long endTime = System.nanoTime();
     }
 
     private void initializeState() {
         long startTime = System.nanoTime();
-        tileMap.stateInitialized(this);
-        npcHandler.stateInitialized(this);
-        populateHealPrayerValues();
+
         long endTime = System.nanoTime();
     }
 
@@ -148,11 +175,11 @@ public class State {
     }
 
     public synchronized void clearState() throws IOException {
-        tileMap.clean(getPlayerTiles());
+        tileMap.clearTiles();
         npcHandler.clearCache();  // Assumes a clearCache method in NPCHandler
     }
 
-    private List<LocalPoint> getPlayerTiles() {
+    private List<WorldPoint> getPlayerTiles() {
         WorldArea worldArea = new WorldArea(
                 client.getLocalPlayer().getWorldArea().getX() - config.overlayRange(),
                 client.getLocalPlayer().getWorldArea().getY() - config.overlayRange(),
@@ -162,15 +189,11 @@ public class State {
         );
         List<WorldPoint> playerTiles = new ArrayList<>();
         for (WorldPoint worldPoint : worldArea.toWorldPointList()) {
-            if (ZayneUtils.validTile(client.getLocalPlayer().getWorldLocation(), worldPoint, client)) {
+            if (ZayneUtils.validTile(worldPoint, client)) {
                 playerTiles.add(worldPoint);
             }
         }
-        List<LocalPoint> localPlayerTiles = new ArrayList<>();
-        for (WorldPoint worldPoint : playerTiles) {
-            localPlayerTiles.add(LocalPoint.fromWorld(client, worldPoint));
-        }
-        return localPlayerTiles;
+        return playerTiles;
     }
 
     public List<EnhancedNPC> getNpcs() {
@@ -185,7 +208,7 @@ public class State {
         return this.playerRunEnergy / 100;
     }
 
-    public int getPlayerSpecialAttackEnergy(){
+    public int getPlayerSpecialAttackEnergy() {
         return this.playerSpecialAttackEnergy;
     }
 
@@ -193,7 +216,9 @@ public class State {
         return 1;
     }
 
-    public int getTicksUntilNextPlayerAttack() { return this.ticksUntilPlayerAttack; }
+    public int getTicksUntilNextPlayerAttack() {
+        return this.ticksUntilPlayerAttack;
+    }
 
     public String getTypeOfAttack() {
         return ZayneMDPSConfig.Option.MAGE.toString();
@@ -203,18 +228,18 @@ public class State {
         return this.playerInventory;
     }
 
-    private void populateHealPrayerValues(){
+    private void populateHealPrayerValues() {
         healingValues.put(ItemID.SHARK, 20);
         healingValues.put(ItemID.MONKFISH, 16);
         healingValues.put(ItemID.ANGLERFISH, 22);
-        healingValues.put(ItemID.SARADOMIN_BREW1, (client.getRealSkillLevel(Skill.HITPOINTS) * 15/100) + 2);
+        healingValues.put(ItemID.SARADOMIN_BREW1, (client.getRealSkillLevel(Skill.HITPOINTS) * 15 / 100) + 2);
         healingValues.put(ItemID.SARADOMIN_BREW2, healingValues.get(ItemID.SARADOMIN_BREW1) * 2);
         healingValues.put(ItemID.SARADOMIN_BREW3, healingValues.get(ItemID.SARADOMIN_BREW1) * 3);
         healingValues.put(ItemID.SARADOMIN_BREW4, healingValues.get(ItemID.SARADOMIN_BREW1) * 4);
-        
+
         prayerRestoreValues.put(ItemID.PRAYER_POTION1,
-                hasHolyWrenchItem() ? (client.getRealSkillLevel(Skill.PRAYER) * 27/100) + 8 :
-                (client.getRealSkillLevel(Skill.PRAYER) * 27/100) + 7
+                hasHolyWrenchItem() ? (client.getRealSkillLevel(Skill.PRAYER) * 27 / 100) + 8 :
+                        (client.getRealSkillLevel(Skill.PRAYER) * 27 / 100) + 7
         );
         prayerRestoreValues.put(ItemID.PRAYER_POTION2, prayerRestoreValues.get(ItemID.PRAYER_POTION1) * 2);
         prayerRestoreValues.put(ItemID.PRAYER_POTION3, prayerRestoreValues.get(ItemID.PRAYER_POTION1) * 3);
@@ -244,7 +269,7 @@ public class State {
         return totalHeals;
     }
 
-    public int getTotalPrayerRestore(){
+    public int getTotalPrayerRestore() {
         return totalPrayerRestore;
     }
 

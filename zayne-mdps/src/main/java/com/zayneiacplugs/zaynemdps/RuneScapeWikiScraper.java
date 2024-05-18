@@ -1,13 +1,14 @@
 package com.zayneiacplugs.zaynemdps;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Scanner;
-import org.json.JSONArray;
-import org.json.JSONObject;
 
 public class RuneScapeWikiScraper {
     private static final String BASE_URL = "https://oldschool.runescape.wiki/w/Special:Ask?class=sortable+wikitable+smwtable&format=json&headers=show&limit=500&link=all&mainlabel=&offset=0&order=asc&prefix=none&prettyprint=true&searchlabel=JSON&sort=&unescape=true&x=-5B-5BCategory%3AMonsters-5D-5D-20-5B-5BName%3A%3A";

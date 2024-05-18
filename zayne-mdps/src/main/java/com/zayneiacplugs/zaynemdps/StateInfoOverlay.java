@@ -1,30 +1,32 @@
 package com.zayneiacplugs.zaynemdps;
 
-import java.awt.*;
-import java.util.stream.Collectors;
-import javax.inject.Inject;
 import net.runelite.api.Client;
-import net.runelite.client.ui.overlay.*;
+import net.runelite.client.ui.overlay.OverlayLayer;
+import net.runelite.client.ui.overlay.OverlayPanel;
+import net.runelite.client.ui.overlay.OverlayPosition;
+import net.runelite.client.ui.overlay.OverlayPriority;
 import net.runelite.client.ui.overlay.components.LineComponent;
 import net.runelite.client.ui.overlay.components.PanelComponent;
 import net.runelite.client.ui.overlay.components.TitleComponent;
 
+import javax.inject.Inject;
+import java.awt.*;
+import java.util.stream.Collectors;
+
 public class StateInfoOverlay extends OverlayPanel {
-    private  Client client;
     private final PanelComponent panelComponent = new PanelComponent();
+    private Client client;
     private State state;
 
     @Inject
-    StateInfoOverlay()
-    {
+    StateInfoOverlay() {
         setPosition(OverlayPosition.TOP_LEFT);
         setPriority(OverlayPriority.HIGH);
         setLayer(OverlayLayer.ABOVE_WIDGETS);
     }
 
     @Override
-    public Dimension render(Graphics2D graphics)
-    {
+    public Dimension render(Graphics2D graphics) {
         panelComponent.getChildren().clear();
 
         // Example state info, replace with your actual state data
@@ -42,8 +44,7 @@ public class StateInfoOverlay extends OverlayPanel {
         return panelComponent.render(graphics);
     }
 
-    private String getStateInfo()
-    {
+    private String getStateInfo() {
         // Replace this with your actual state retrieval logic
         // Example state data
         String ticksUntilNextAttack = String.valueOf(state.getTicksUntilNextNPCAttack());
@@ -63,8 +64,7 @@ public class StateInfoOverlay extends OverlayPanel {
     }
 
 
-    public void addState(State state){
+    public void addState(State state) {
         this.state = state;
-        this.client = client;
     }
 }

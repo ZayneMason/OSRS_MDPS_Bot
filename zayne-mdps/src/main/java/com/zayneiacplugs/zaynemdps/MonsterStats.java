@@ -15,41 +15,101 @@ public class MonsterStats {
     private int rangeDefenceBonus;
 
     // Getters and Setters
-    public int getNpcId() { return npcId; }
-    public void setNpcId(int npcId) { this.npcId = npcId; }
+    public int getNpcId() {
+        return npcId;
+    }
 
-    public int getCombatLevel() { return combatLevel; }
-    public void setCombatLevel(int combatLevel) { this.combatLevel = combatLevel; }
+    public void setNpcId(int npcId) {
+        this.npcId = npcId;
+    }
 
-    public int getHitpoints() { return hitpoints; }
-    public void setHitpoints(int hitpoints) { this.hitpoints = hitpoints; }
+    public int getCombatLevel() {
+        return combatLevel;
+    }
 
-    public String getAttackStyles() { return attackStyles; }
-    public void setAttackStyles(String attackStyles) { this.attackStyles = attackStyles; }
+    public void setCombatLevel(int combatLevel) {
+        this.combatLevel = combatLevel;
+    }
 
-    public int getAttackSpeed() { return attackSpeed; }
-    public void setAttackSpeed(int attackSpeed) { this.attackSpeed = attackSpeed; }
+    public int getHitpoints() {
+        return hitpoints;
+    }
 
-    public int getDefenceLevel() { return defenceLevel; }
-    public void setDefenceLevel(int defenceLevel) { this.defenceLevel = defenceLevel; }
+    public void setHitpoints(int hitpoints) {
+        this.hitpoints = hitpoints;
+    }
 
-    public int getStabDefenceBonus() { return stabDefenceBonus; }
-    public void setStabDefenceBonus(int stabDefenceBonus) { this.stabDefenceBonus = stabDefenceBonus; }
+    public String getAttackStyles() {
+        return attackStyles;
+    }
 
-    public int getSlashDefenceBonus() { return slashDefenceBonus; }
-    public void setSlashDefenceBonus(int slashDefenceBonus) { this.slashDefenceBonus = slashDefenceBonus; }
+    public void setAttackStyles(String attackStyles) {
+        this.attackStyles = attackStyles;
+    }
 
-    public int getCrushDefenceBonus() { return crushDefenceBonus; }
-    public void setCrushDefenceBonus(int crushDefenceBonus) { this.crushDefenceBonus = crushDefenceBonus; }
+    public int getAttackSpeed() {
+        return attackSpeed;
+    }
 
-    public int getMagicLevel() { return magicLevel; }
-    public void setMagicLevel(int magicLevel) { this.magicLevel = magicLevel; }
+    public void setAttackSpeed(int attackSpeed) {
+        this.attackSpeed = attackSpeed;
+    }
 
-    public int getMagicDefenceBonus() { return magicDefenceBonus; }
-    public void setMagicDefenceBonus(int magicDefenceBonus) { this.magicDefenceBonus = magicDefenceBonus; }
+    public int getDefenceLevel() {
+        return defenceLevel;
+    }
 
-    public int getRangeDefenceBonus() { return rangeDefenceBonus; }
-    public void setRangeDefenceBonus(int rangeDefenceBonus) { this.rangeDefenceBonus = rangeDefenceBonus; }
+    public void setDefenceLevel(int defenceLevel) {
+        this.defenceLevel = defenceLevel;
+    }
+
+    public int getStabDefenceBonus() {
+        return stabDefenceBonus;
+    }
+
+    public void setStabDefenceBonus(int stabDefenceBonus) {
+        this.stabDefenceBonus = stabDefenceBonus;
+    }
+
+    public int getSlashDefenceBonus() {
+        return slashDefenceBonus;
+    }
+
+    public void setSlashDefenceBonus(int slashDefenceBonus) {
+        this.slashDefenceBonus = slashDefenceBonus;
+    }
+
+    public int getCrushDefenceBonus() {
+        return crushDefenceBonus;
+    }
+
+    public void setCrushDefenceBonus(int crushDefenceBonus) {
+        this.crushDefenceBonus = crushDefenceBonus;
+    }
+
+    public int getMagicLevel() {
+        return magicLevel;
+    }
+
+    public void setMagicLevel(int magicLevel) {
+        this.magicLevel = magicLevel;
+    }
+
+    public int getMagicDefenceBonus() {
+        return magicDefenceBonus;
+    }
+
+    public void setMagicDefenceBonus(int magicDefenceBonus) {
+        this.magicDefenceBonus = magicDefenceBonus;
+    }
+
+    public int getRangeDefenceBonus() {
+        return rangeDefenceBonus;
+    }
+
+    public void setRangeDefenceBonus(int rangeDefenceBonus) {
+        this.rangeDefenceBonus = rangeDefenceBonus;
+    }
 
     @Override
     public String toString() {

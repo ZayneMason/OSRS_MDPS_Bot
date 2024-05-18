@@ -18,7 +18,7 @@ public class NPCConfig {
         this.range = range;
         this.config = config;
         this.monsterStats = RuneScapeWikiScraper.getMonsterStats(name);
-        MessageUtils.addMessage("Config added: " + monsterStats);
+        MessageUtils.addMessage("Config added: " + getName());
     }
 
     public String getName() {

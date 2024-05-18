@@ -41,9 +41,6 @@ public class ZayneMDPSPlugin extends Plugin {
     @Inject
     private ZayneMDPSConfig config;
     @Inject
-    private ZayneMDPSOverlay overlay;
-
-    @Inject
     private StateInfoOverlay stateInfoOverlay;
     private ClientTick clientTick;
     private State state;
@@ -63,12 +60,15 @@ public class ZayneMDPSPlugin extends Plugin {
     protected void startUp() throws Exception {
         if (client.getGameState() == GameState.LOGGED_IN) {
             initializeExecutorService();
-            this.state = new State(client, config, overlay);
-            overlay.addState(state);
-            stateInfoOverlay.addState(state);
-            overlayManager.add(overlay);
-            overlayManager.add(stateInfoOverlay);
+            initializeState();
             state.refreshState();
+            stateInfoOverlay.addState(state);
+            overlayManager.add(stateInfoOverlay);
+            MessageUtils.addMessage("Checking state shit: ");
+            MessageUtils.addMessage("\n" + state.getClient().toString() +
+                                    "\n" + state.getNpcs().toString() +
+                                    "\n" + state.tileMap.getAllTiles().toString() +
+                                    "\n" + state.playerTiles.toString());
         }
     }
 
@@ -76,6 +76,8 @@ public class ZayneMDPSPlugin extends Plugin {
     @Override
     protected void shutDown() throws IOException {
         try {
+            overlayManager.remove(stateInfoOverlay);
+            state.clearState();
             if (executorService != null && !executorService.isShutdown()) {
                 executorService.shutdownNow();
                 executorService.awaitTermination(10, TimeUnit.SECONDS);
@@ -83,9 +85,6 @@ public class ZayneMDPSPlugin extends Plugin {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
-        overlayManager.remove(overlay);
-        overlayManager.remove(stateInfoOverlay);
-        state.clearState();
     }
 
     private void initializeExecutorService() {
@@ -93,38 +92,37 @@ public class ZayneMDPSPlugin extends Plugin {
             executorService = Executors.newFixedThreadPool(2);
         }
     }
+
+    private void initializeState() throws IOException {
+        state = new State(client, config, executorService);
+        if (client == null) {
+            MessageUtils.addMessage("initializeState: client is null");
+        }
+        if (config == null) {
+            MessageUtils.addMessage("initializeState: config is null");
+        }
+        if (executorService == null) {
+            MessageUtils.addMessage("initializeState: executorService is null");
+        }
+    }
+
     @Subscribe
     public void onGameTick(GameTick tick) throws Exception {
         if (executor.isShutdown()) {
             return;
         }
-        if (state == null) {
-            startUp();
-        } else {
-            executor.submit(() -> {
-                state.refreshState();
-            });
+        else {
+                executor.submit(() -> {
+                    state.refreshState();
+                });
+            }
         }
-    }
 
     @Subscribe
     public void onGameStateChanged(GameStateChanged gameStateChanged) {
-        if (overlay != null) {
-            overlayManager.remove(overlay);
-            overlayManager.remove(stateInfoOverlay);
-            overlay = new ZayneMDPSOverlay();
+            overlayManager.clear();
             stateInfoOverlay = new StateInfoOverlay();
-            overlay.addState(state);
             stateInfoOverlay.addState(state);
             overlayManager.add(stateInfoOverlay);
-            overlayManager.add(overlay);
-        } else {
-            overlay = new ZayneMDPSOverlay();
-            stateInfoOverlay = new StateInfoOverlay();
-            overlay.addState(state);
-            stateInfoOverlay.addState(state);
-            overlayManager.add(overlay);
-            overlayManager.add(stateInfoOverlay);
-        }
     }
 }
