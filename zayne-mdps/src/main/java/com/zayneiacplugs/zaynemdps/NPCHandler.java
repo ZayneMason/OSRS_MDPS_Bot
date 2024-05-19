@@ -1,5 +1,6 @@
 package com.zayneiacplugs.zaynemdps;
 
+import net.runelite.api.AnimationID;
 import net.runelite.api.Client;
 import net.runelite.api.NPC;
 import net.runelite.api.coords.LocalPoint;
@@ -15,13 +16,14 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 public class NPCHandler {
-    @Inject
-    private ZayneMDPSConfig config;
     private final String configInfo;
     private final CopyOnWriteArrayList<EnhancedNPC> enhancedNPCS;
     public volatile List<NPCConfig> cachedNPCConfigs;
+    @Inject
+    private ZayneMDPSConfig config;
     private volatile WorldArea playerArea;
     private volatile int npcCounter;
+    private Client client;
 
     @Inject
     public NPCHandler(ZayneMDPSConfig config) {
@@ -60,8 +62,9 @@ public class NPCHandler {
         }
         // Remove missing NPCs
         enhancedNPCS.removeIf(npc -> !newIds.contains(npc.getUniqueId()));
-        for (EnhancedNPC npc : enhancedNPCS){
+        for (EnhancedNPC npc : enhancedNPCS) {
             npc.updateLocation();
+            npc.updateAttack(npc.getNpc().getAnimation() != AnimationID.IDLE);
         }
     }
 
@@ -78,7 +81,7 @@ public class NPCHandler {
     private List<EnhancedNPC> generateEnhancedNPCList(boolean getStats) {
         List<EnhancedNPC> enhancedNPCSList = new ArrayList<>();
         for (NPCConfig npcConfig : cachedNPCConfigs) {
-            if (NPCs.getAll(npcConfig.getName()).isEmpty()) return enhancedNPCSList;
+            if (NPCs.getAll(npcConfig.getName()).isEmpty()) continue;
             for (NPC npc : NPCs.getAll(npcConfig.getName())) {
                 if (npc == null) continue;
                 enhancedNPCSList.add(new EnhancedNPC(npc, npcConfig, getStats, npcCounter));
@@ -107,7 +110,7 @@ public class NPCHandler {
         return cachedNPCConfigs;
     }
 
-    public void handleNPCPosition(EnhancedNPC npc, TileMap tileMap, Client client, List<WorldPoint> playerTiles) {
+    public void handleNPCPosition(EnhancedNPC npc, TileMap tileMap, Client client, List<LocalPoint> playerTiles) {
         if (npc == null) {
             return;
         }
@@ -119,40 +122,39 @@ public class NPCHandler {
         }
 
         int attackRange = npc.getNpcConfig().getRange();
+        ZayneMDPSConfig.Option attackStyle = npc.getNpcConfig().getAttackStyle();
 
-        for (WorldPoint playerWorldPoint : playerTiles) {
-            boolean flagHasLineOfSight = ZayneUtils.hasLineOfSight(npcArea.toWorldPoint(), playerWorldPoint, client);
+        for (LocalPoint playerLocalPoint : playerTiles) {
+            WorldPoint playerWorldPoint = WorldPoint.fromLocal(client, playerLocalPoint);
+            boolean hasLineOfSight = ZayneUtils.hasLineOfSight(npcArea.toWorldPoint(), playerWorldPoint, client);
 
-            if (!flagHasLineOfSight) {
-                tileMap.addOrUpdateTile(playerWorldPoint, npc.getNpc().getId(), -1, ZayneMDPSConfig.Option.OUT_OF_RANGE_OUT_LOS);
-                continue;
-            }
+            double distance = calculateDistance(npcArea, playerLocalPoint, attackStyle);
+            boolean isInRange = distance <= attackRange;
+            boolean isUnderNPC = playerWorldPoint.isInArea2D(npcArea);
 
-            boolean tileIsUnderNPC = playerWorldPoint.isInArea2D(npcArea);
-
-            if (tileIsUnderNPC) {
-                // Tiles under NPC are out of LOS
-                tileMap.addOrUpdateTile(playerWorldPoint, npc.getNpc().getId(), -1, ZayneMDPSConfig.Option.OUT_OF_RANGE_IN_LOS);
+            ZayneMDPSConfig.Option attackStatus;
+            int ticksUntilAttack = npc.getTicksUntilAttack();
+            if (!hasLineOfSight) {
+                attackStatus = ZayneMDPSConfig.Option.OUT_OF_RANGE_OUT_LOS;
             } else {
-                double distance = calculateDistance(npcArea, playerWorldPoint, npc.getNpcConfig().getAttackStyle());
-                if (distance <= attackRange) {
-                    int ticksUntilAttack = npc.getTicksUntilAttack();
-                    tileMap.addOrUpdateTile(playerWorldPoint, npc.getNpc().getId(), ticksUntilAttack, npc.getNpcConfig().getAttackStyle());
-                    // If NPC attacks, reset the attack ticks
-                    if (ticksUntilAttack == 0) {
-                        npc.resetTicksUntilAttack();
-                    }
+                if (isUnderNPC) {
+                    attackStatus = ZayneMDPSConfig.Option.OUT_OF_RANGE_IN_LOS;
                 } else {
-                    // Has LOS, not in attack range
-                    tileMap.addOrUpdateTile(playerWorldPoint, npc.getNpc().getId(), -1, ZayneMDPSConfig.Option.OUT_OF_RANGE_IN_LOS);
+                    if (!isInRange) {
+                        attackStatus = ZayneMDPSConfig.Option.OUT_OF_RANGE_IN_LOS;
+                    } else {
+                        attackStatus = attackStyle;
+                    }
                 }
             }
+            tileMap.addOrUpdateTile(playerLocalPoint, npc.getNpc().getId(), ticksUntilAttack, attackStatus);
         }
     }
 
-    private double calculateDistance(WorldArea npcArea, WorldPoint targetPoint, ZayneMDPSConfig.Option attackStyle) {
-        double minDistance = Double.MAX_VALUE;
 
+    private double calculateDistance(WorldArea npcArea, LocalPoint targetPoint, ZayneMDPSConfig.Option attackStyle) {
+        double minDistance = Double.MAX_VALUE;
+        WorldPoint targetWorldPoint = WorldPoint.fromLocal(client, targetPoint);
         for (int x = npcArea.getX(); x < npcArea.getX() + npcArea.getWidth(); x++) {
             for (int y = npcArea.getY(); y < npcArea.getY() + npcArea.getHeight(); y++) {
                 double currentDistance = 0;
@@ -160,8 +162,8 @@ public class NPCHandler {
                     case MELEE:
                     case WARBAND_MAGE:
                     case WARBAND_RANGE:
-                        int dx = Math.abs(x - targetPoint.getX());
-                        int dy = Math.abs(y - targetPoint.getY());
+                        int dx = Math.abs(x - targetWorldPoint.getX());
+                        int dy = Math.abs(y - targetWorldPoint.getY());
                         if (dx != 0 && dy != 0) {
                             continue; // Skip diagonals
                         }
@@ -169,7 +171,7 @@ public class NPCHandler {
                     case MAGE:
                     case RANGE:
                     case SPECIAL_MELEE:
-                        currentDistance = Math.max(Math.abs(x - targetPoint.getX()), Math.abs(y - targetPoint.getY()));
+                        currentDistance = Math.max(Math.abs(x - targetWorldPoint.getX()), Math.abs(y - targetWorldPoint.getY()));
                 }
                 if (currentDistance < minDistance) {
                     minDistance = currentDistance;
@@ -183,9 +185,10 @@ public class NPCHandler {
         return enhancedNPCS;
     }
 
-    public void process(Client client, ZayneMDPSConfig config, TileMap tileMap, List<WorldPoint> playerTiles) {
+    public void process(Client client, ZayneMDPSConfig config, TileMap tileMap, List<LocalPoint> playerTiles) {
         this.updateNPCs();
         if (enhancedNPCS.isEmpty()) {
+            tileMap.upToDate(true);
             return;
         }
         for (EnhancedNPC enhancedNPC : enhancedNPCS) {
@@ -224,6 +227,7 @@ public class NPCHandler {
 
     public void stateInitialized(State state) {
         try {
+            this.client = state.client;
             this.cachedNPCConfigs = parseNPCConfig(config);
             process(state.client, state.config, state.tileMap, state.playerTiles);
             MessageUtils.addMessage("NPCHandler state initialized.");

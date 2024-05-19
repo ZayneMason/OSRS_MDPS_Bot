@@ -41,7 +41,8 @@ public class StateInfoOverlay extends OverlayPanel {
                 .left("State: " + getStateInfo())
                 .build());
         panelComponent.setPreferredSize(new Dimension(300, 0));
-        return panelComponent.render(graphics);
+        panelComponent.render(graphics);
+        return null;
     }
 
     private String getStateInfo() {
@@ -58,13 +59,15 @@ public class StateInfoOverlay extends OverlayPanel {
         String npcs = (state.getNpcs() != null && !state.getNpcs().isEmpty()) ?
                 String.valueOf(state.getNpcs().stream().map(EnhancedNPC::getNpcConfig).map(NPCConfig::getName).collect(Collectors.joining(", "))) :
                 "No NPCs";
+        String tilesInMap = String.valueOf(state.tileMap.getAllTiles().size());
+        String attackStyles = String.valueOf(state.tileMap.getDistinctAttackStyles().toString());
 
-        return String.format("\nTicks until next attack: %s\nAttack Type: %s\nPlayer health: %s\nHeals: %s\nPlayer prayer: %s\nPrayer restores: %s\nPlayer run energy: %s\nSpecial Energy: %s\nNPCs: %s",
-                ticksUntilNextAttack, attackType, playerHealth, totalHeals, playerPrayer, totalPrayerRestore, playerRunEnergy, playerSpecialAttackEnergy, npcs);
+        return String.format("\nTicks until next attack: %s\nAttack Type: %s\nPlayer health: %s\nHeals: %s\nPlayer prayer: %s\nPrayer restores: %s\nPlayer run energy: %s\nSpecial Energy: %s\nNPCs: %s\nTiles in map: %s\nAttack styles: %s",
+                ticksUntilNextAttack, attackType, playerHealth, totalHeals, playerPrayer, totalPrayerRestore, playerRunEnergy, playerSpecialAttackEnergy, npcs, tilesInMap, attackStyles);
     }
-
 
     public void addState(State state) {
         this.state = state;
+        this.client = state.client;
     }
 }

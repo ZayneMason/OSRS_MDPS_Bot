@@ -1,9 +1,9 @@
 package com.zayneiacplugs.zaynemdps;
 
 public class AttackInfo {
-    private final int npcId;
-    private final int ticksUntilAttack;
-    private final ZayneMDPSConfig.Option attackType;
+    public final int npcId;
+    public final int ticksUntilAttack;
+    public final ZayneMDPSConfig.Option attackType;
 
     public AttackInfo(int npcId, int ticksUntilAttack, ZayneMDPSConfig.Option attackType) {
         this.npcId = npcId;

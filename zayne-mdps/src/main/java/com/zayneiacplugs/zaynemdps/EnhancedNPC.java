@@ -3,41 +3,41 @@ package com.zayneiacplugs.zaynemdps;
 import net.runelite.api.Client;
 import net.runelite.api.NPC;
 import net.runelite.api.coords.LocalPoint;
-import net.runelite.api.coords.WorldArea;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.GameTick;
-import net.runelite.client.eventbus.Subscribe;
 
 import javax.inject.Inject;
 import java.util.HashMap;
 
 public class EnhancedNPC extends GameTick {
-        private final boolean interacting;
-        private final int uniqueId;
-        private final NPC npc;
-        final NPCConfig npcConfig;
-        private final int attackSpeed;
+    final NPCConfig npcConfig;
+    private final boolean interacting;
+    private final int uniqueId;
+    private final NPC npc;
+    private final int attackSpeed;
+    private final int range;
+    int ticksUntilAttack;
     @Inject
-        private Client client;
-        private LocalPoint location;
-        private int health = 0;
-        int ticksUntilAttack;
-        private MonsterStats monsterStats;
-        private HashMap<WorldPoint, Integer> safeSpotCache = new HashMap<>();
-        private ZayneMDPSConfig.Option nextAttack;
+    private Client client;
+    private LocalPoint location;
+    private int health = 0;
+    private MonsterStats monsterStats;
+    private HashMap<WorldPoint, Integer> safeSpotCache = new HashMap<>();
+    private ZayneMDPSConfig.Option nextAttack;
 
-        public EnhancedNPC(NPC npc, NPCConfig npcConfig, boolean getStats, int id) {
-            this.npc = npc;
-            this.location = npc.getLocalLocation();
-            this.npcConfig = npcConfig;
-            this.uniqueId = id;
-            this.health = 1;
-            this.ticksUntilAttack = 0;  // Example default value
-            this.monsterStats = npcConfig.getMonsterStats();
-            this.attackSpeed = monsterStats.getAttackSpeed();
-            this.interacting = npc.isInteracting();
-            this.nextAttack = npcConfig.getAttackStyle();
-        }
+    public EnhancedNPC(NPC npc, NPCConfig npcConfig, boolean getStats, int id) {
+        this.npc = npc;
+        this.location = npc.getLocalLocation();
+        this.npcConfig = npcConfig;
+        this.uniqueId = id;
+        this.health = 1;
+        this.ticksUntilAttack = 1;  // Example default value
+        this.monsterStats = npcConfig.getMonsterStats();
+        this.attackSpeed = monsterStats.getAttackSpeed();
+        this.interacting = npc.isInteracting();
+        this.nextAttack = npcConfig.getAttackStyle();
+        this.range = npcConfig.getRange();
+    }
 
     public int getUniqueId() {
         return uniqueId;
@@ -68,41 +68,34 @@ public class EnhancedNPC extends GameTick {
     }
 
     public void updateLocation() {
-        if (npc.getLocalLocation() != location){
+        if (npc.getLocalLocation() != location) {
             location = npc.getLocalLocation();
         }
     }
 
-    public MonsterStats getMonsterStats(){
+    public MonsterStats getMonsterStats() {
         return monsterStats;
     }
 
-        public void updateNextAttack(ZayneMDPSConfig.Option nextAttack, int ticks) {
-            this.nextAttack = nextAttack;
-            setTicksUntilAttack(ticks);
-        }
+    public void updateNextAttack(int ticks) {
+        setTicksUntilAttack(ticks);
+    }
 
-        public void updateAttack(boolean canAttack) {
-            if (canAttack) {
-                if (ticksUntilAttack > 0) {
-                    ticksUntilAttack--;
-                } else if (ticksUntilAttack == 0) {
-                    updateNextAttack(nextAttack, attackSpeed);
-                }
-            } else {
-                if (ticksUntilAttack > 0) {
-                    ticksUntilAttack--;
-                }
+    public void updateAttack(boolean attacked) {
+        if (ticksUntilAttack > 0) {
+            ticksUntilAttack--;
+        } else if (ticksUntilAttack == 0) {
+            if (attacked) {
+                resetTicksUntilAttack();
             }
         }
-
-    public void update(boolean canAttack) {
-            updateLocation();
-            updateAttack(canAttack);
+        if (attacked) {
+            resetTicksUntilAttack();
+        }
     }
 
     public void resetTicksUntilAttack() {
-            setTicksUntilAttack(attackSpeed);
+        this.ticksUntilAttack = attackSpeed;
     }
 }
 

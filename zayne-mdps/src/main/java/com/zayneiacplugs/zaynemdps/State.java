@@ -5,13 +5,14 @@ import net.runelite.api.*;
 import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.coords.WorldArea;
 import net.runelite.api.coords.WorldPoint;
+import net.unethicalite.api.entities.Players;
+import net.unethicalite.api.entities.TileObjects;
 import net.unethicalite.api.utils.MessageUtils;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class State {
@@ -32,9 +33,7 @@ public class State {
     public int playerPrayerPoints;
     public int tick;
     public AtomicBoolean upToDate = new AtomicBoolean(false);
-    public WorldArea playerArea;
-    public List<WorldPoint> playerTiles;
-    public TileMap cachedTileMap;
+    public List<LocalPoint> playerTiles;
     private ItemContainer playerInventory;
     private int ticksUntilPlayerAttack;
     private Item[] inventoryItems;
@@ -42,17 +41,13 @@ public class State {
     private int totalPrayerRestore;
 
     @Inject
-    public State(Client client, ZayneMDPSConfig config, ExecutorService executorService) throws IOException {
+    public State(Client client, ZayneMDPSConfig config) throws IOException {
         this.config = config;
         this.client = client;
-        this.tileMap = new TileMap(this);
+        this.tileMap = new TileMap();
         this.npcHandler = new NPCHandler(config);
-        this.playerArea = getPlayerArea();
-        this.playerTiles = getPlayerTiles();
-        this.playerInventory = client.getItemContainer(InventoryID.INVENTORY);
-        this.inventoryItems = playerInventory != null ? playerInventory.getItems() : new Item[0];
-        tileMap.stateInitialized(this);
-        npcHandler.stateInitialized(this);
+        this.inventoryItems = new Item[0];
+        initializeState();
         populateHealPrayerValues();
         refreshState();
     }
@@ -75,35 +70,11 @@ public class State {
 
     public void refreshState() {
         long startTime = System.currentTimeMillis();
-        MessageUtils.addMessage("refreshState: Started at " + startTime);
-
         try {
-            MessageUtils.addMessage("refreshState: Updating player info");
             updatePlayerInfo();
-            MessageUtils.addMessage("refreshState: Player info updated");
-
-            MessageUtils.addMessage("refreshState: Processing state");
             processState();
-            MessageUtils.addMessage("refreshState: State processed");
-
-            MessageUtils.addMessage("refreshState: Cloning tile map");
-            cachedTileMap = tileMap.cloneTiles(this);
-            MessageUtils.addMessage("refreshState: Tile map cloned");
-
-            MessageUtils.addMessage("refreshState: Setting state as up to date");
-
-            MessageUtils.addMessage("refreshState: State set as up to date");
-
-            MessageUtils.addMessage("refreshState: Running stateUpdated");
-            MessageUtils.addMessage("refreshState: stateUpdated complete");
-
-            MessageUtils.addMessage("refreshState: Updating NPCs");
-            this.npcs = npcHandler.getEnhancedNPCS();
-            MessageUtils.addMessage("refreshState: NPCs updated, count: " + (npcs != null ? npcs.size() : 0));
-
-            MessageUtils.addMessage("refreshState: Updating NPC configs");
-            this.npcConfigs = npcHandler.getCachedNPCConfigs();
-            MessageUtils.addMessage("refreshState: NPC configs updated, count: " + (npcConfigs != null ? npcConfigs.size() : 0));
+            MessageUtils.addMessage("Tile count: " + tileMap.getAllTiles().size());
+            stateUpdated();
             setUpToDate(true);
         } catch (Exception e) {
             upToDate.set(false);
@@ -112,21 +83,21 @@ public class State {
         }
 
         long endTime = System.currentTimeMillis();
-        MessageUtils.addMessage("refreshState: Completed at " + endTime + ", duration: " + (endTime - startTime) + " ms");
+        MessageUtils.addMessage("State refreshed: " + (endTime - startTime) + " ms");
     }
 
 
     private void updatePlayerInfo() {
-            playerArea = getPlayerArea();
-            this.playerTiles = getPlayerTiles();
-            this.playerInventory = client.getItemContainer(InventoryID.INVENTORY);
-            this.inventoryItems = playerInventory != null ? playerInventory.getItems() : new Item[0];
-            this.playerHealth = client.getBoostedSkillLevel(Skill.HITPOINTS);
-            this.totalHeals = getHeals();
-            this.playerPrayerPoints = client.getBoostedSkillLevel(Skill.PRAYER);
-            this.totalPrayerRestore = getPrayerRestores();
-            this.playerRunEnergy = client.getEnergy();
-            this.playerSpecialAttackEnergy = client.getVarpValue(VarPlayer.SPECIAL_ATTACK_PERCENT) / 10;
+        this.playerLocation = client.getLocalPlayer().getLocalLocation();
+        this.playerTiles = getPlayerTiles();
+        this.playerInventory = client.getItemContainer(InventoryID.INVENTORY);
+        this.inventoryItems = playerInventory != null ? playerInventory.getItems() : new Item[0];
+        this.playerHealth = client.getBoostedSkillLevel(Skill.HITPOINTS);
+        this.totalHeals = getHeals();
+        this.playerPrayerPoints = client.getBoostedSkillLevel(Skill.PRAYER);
+        this.totalPrayerRestore = getPrayerRestores();
+        this.playerRunEnergy = client.getEnergy();
+        this.playerSpecialAttackEnergy = client.getVarpValue(VarPlayer.SPECIAL_ATTACK_PERCENT) / 10;
     }
 
     private int getPrayerRestores() {
@@ -150,19 +121,24 @@ public class State {
     }
 
     private void stateUpdated() {
-        setUpToDate(false);
-        tileMap.stateUpdated(this);
+        this.npcs = npcHandler.getEnhancedNPCS();
+        this.npcConfigs = npcHandler.getCachedNPCConfigs();
+        for (EnhancedNPC enhancedNPC : getNpcs()) {
+            MessageUtils.addMessage(enhancedNPC.getNpc().getName() + ": " + enhancedNPC.getTicksUntilAttack() + "ticks until attack");
+        }
+        ;
+        setUpToDate(true);
     }
 
     private void processState() {
         upToDate.set(false);
-        tileMap.stateProcessing(this);
+        tileMap.clearTiles();
         npcHandler.stateProcessing(this);
     }
 
     private void initializeState() {
         long startTime = System.nanoTime();
-
+        npcHandler.stateInitialized(this);
         long endTime = System.nanoTime();
     }
 
@@ -179,21 +155,32 @@ public class State {
         npcHandler.clearCache();  // Assumes a clearCache method in NPCHandler
     }
 
-    private List<WorldPoint> getPlayerTiles() {
+    List<LocalPoint> getPlayerTiles() {
         WorldArea worldArea = new WorldArea(
-                client.getLocalPlayer().getWorldArea().getX() - config.overlayRange(),
-                client.getLocalPlayer().getWorldArea().getY() - config.overlayRange(),
+                client.getLocalPlayer().getWorldLocation().getX() - config.overlayRange(),
+                client.getLocalPlayer().getWorldLocation().getY() - config.overlayRange(),
                 1 + (2 * config.overlayRange()),
                 1 + (2 * config.overlayRange()),
                 client.getLocalPlayer().getWorldArea().getPlane()
         );
+
+        List<TileObject> tileObjects = TileObjects.getSurrounding(
+                Players.getLocal().getWorldLocation(),
+                35,
+                tru -> true
+        );
+
         List<WorldPoint> playerTiles = new ArrayList<>();
         for (WorldPoint worldPoint : worldArea.toWorldPointList()) {
             if (ZayneUtils.validTile(worldPoint, client)) {
                 playerTiles.add(worldPoint);
             }
         }
-        return playerTiles;
+        List<LocalPoint> localPlayerTiles = new ArrayList<>();
+        for (WorldPoint worldPoint : playerTiles) {
+            localPlayerTiles.add(LocalPoint.fromWorld(client, worldPoint));
+        }
+        return localPlayerTiles;
     }
 
     public List<EnhancedNPC> getNpcs() {

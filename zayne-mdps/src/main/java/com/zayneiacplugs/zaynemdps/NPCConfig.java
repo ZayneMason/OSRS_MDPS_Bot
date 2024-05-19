@@ -6,8 +6,8 @@ import java.awt.*;
 import java.io.IOException;
 
 public class NPCConfig {
+    final String attackStyle;
     private final String name;
-    private final String attackStyle;
     private final int range;
     private final ZayneMDPSConfig config;
     public MonsterStats monsterStats = null;
