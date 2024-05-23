@@ -13,11 +13,12 @@ import javax.inject.Inject;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 
-public class NPCHandler {
+public class NPCHandler implements Cloneable{
     private final String configInfo;
-    private final CopyOnWriteArrayList<EnhancedNPC> enhancedNPCS;
+    private CopyOnWriteArrayList<EnhancedNPC> enhancedNPCS;
     public volatile List<NPCConfig> cachedNPCConfigs;
     @Inject
     private ZayneMDPSConfig config;
@@ -59,13 +60,10 @@ public class NPCHandler {
             if (!currentIds.contains(newNPC.getUniqueId())) {
                 enhancedNPCS.add(newNPC);
             }
+
         }
         // Remove missing NPCs
         enhancedNPCS.removeIf(npc -> !newIds.contains(npc.getUniqueId()));
-        for (EnhancedNPC npc : enhancedNPCS) {
-            npc.updateLocation();
-            npc.updateAttack(npc.getNpc().getAnimation() != AnimationID.IDLE);
-        }
     }
 
     private List<Integer> getEnhancedNPCIds(List<EnhancedNPC> enhancedNPCList) {
@@ -83,9 +81,8 @@ public class NPCHandler {
         for (NPCConfig npcConfig : cachedNPCConfigs) {
             if (NPCs.getAll(npcConfig.getName()).isEmpty()) continue;
             for (NPC npc : NPCs.getAll(npcConfig.getName())) {
-                if (npc == null) continue;
+                if (npc == null || npc.getId() == 12827) continue;
                 enhancedNPCSList.add(new EnhancedNPC(npc, npcConfig, getStats, npcCounter));
-                npcCounter++;
             }
         }
         return enhancedNPCSList;
@@ -111,6 +108,7 @@ public class NPCHandler {
     }
 
     public void handleNPCPosition(EnhancedNPC npc, TileMap tileMap, Client client, List<LocalPoint> playerTiles) {
+
         if (npc == null) {
             return;
         }
@@ -191,6 +189,31 @@ public class NPCHandler {
             tileMap.upToDate(true);
             return;
         }
+        enhancedNPCS.forEach(enhancedNPC -> {
+            NPC npc = enhancedNPC.getNpc();
+            int currentAnimationId = npc.getAnimation();
+
+            if (currentAnimationId != AnimationID.IDLE) {
+                if (currentAnimationId != enhancedNPC.getLastAnimationId()) {
+                    enhancedNPC.resetTicksUntilAttack();
+                    enhancedNPC.setLastAnimationId(currentAnimationId);
+                    enhancedNPC.setAttacking(true);
+                }
+            } else {
+                enhancedNPC.setAttacking(false);
+                enhancedNPC.setLastAnimationId(AnimationID.IDLE);
+            }
+
+            if (enhancedNPC.isAttacking()) {
+                if (enhancedNPC.getTicksUntilAttack() > 0) {
+                    enhancedNPC.setTicksUntilAttack(enhancedNPC.getTicksUntilAttack() - 1);
+                }
+            } else {
+                if (enhancedNPC.getTicksUntilAttack() > 0) {
+                    enhancedNPC.setTicksUntilAttack(enhancedNPC.getTicksUntilAttack() - 1);
+                }
+            }
+        });
         for (EnhancedNPC enhancedNPC : enhancedNPCS) {
             handleNPCPosition(enhancedNPC, tileMap, client, playerTiles);
         }
@@ -241,6 +264,19 @@ public class NPCHandler {
             process(state.client, state.config, state.tileMap, state.playerTiles);
         } catch (Exception e) {
             e.printStackTrace();
+        }
+    }
+
+    @Override
+    public NPCHandler clone() {
+        try {
+            NPCHandler clone = (NPCHandler) super.clone();
+            // Perform deep copy for fields that require it
+            clone.cachedNPCConfigs = new ArrayList<>(this.cachedNPCConfigs);
+            clone.enhancedNPCS = new CopyOnWriteArrayList<>(this.enhancedNPCS);
+            return clone;
+        } catch (CloneNotSupportedException e) {
+            throw new AssertionError("Cloning not supported", e);
         }
     }
 }

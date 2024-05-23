@@ -5,17 +5,22 @@ import net.runelite.api.*;
 import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.coords.WorldArea;
 import net.runelite.api.coords.WorldPoint;
+import net.runelite.api.events.ClientTick;
+import net.runelite.client.util.WeaponSpeedMap;
 import net.unethicalite.api.entities.Players;
 import net.unethicalite.api.entities.TileObjects;
+import net.unethicalite.api.items.Equipment;
+import net.unethicalite.api.movement.pathfinder.Walker;
 import net.unethicalite.api.utils.MessageUtils;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public class State {
+public class State implements Cloneable{
     private static final HashMap<Integer, Integer> healingValues = new HashMap<Integer, Integer>();
     private static final HashMap<Integer, Integer> prayerRestoreValues = new HashMap<Integer, Integer>();
     public Client client;
@@ -39,12 +44,14 @@ public class State {
     private Item[] inventoryItems;
     private int totalHeals;
     private int totalPrayerRestore;
+    private int lastAttackTick;
+    private int nextAttackTick;
 
     @Inject
     public State(Client client, ZayneMDPSConfig config) throws IOException {
         this.config = config;
         this.client = client;
-        this.tileMap = new TileMap();
+        this.tileMap = new TileMap(client);
         this.npcHandler = new NPCHandler(config);
         this.inventoryItems = new Item[0];
         initializeState();
@@ -70,17 +77,13 @@ public class State {
 
     public void refreshState() {
         long startTime = System.currentTimeMillis();
-        try {
+
             updatePlayerInfo();
             processState();
             MessageUtils.addMessage("Tile count: " + tileMap.getAllTiles().size());
             stateUpdated();
             setUpToDate(true);
-        } catch (Exception e) {
-            upToDate.set(false);
-            MessageUtils.addMessage("refreshState: Exception occurred - " + e.getMessage());
-            e.printStackTrace();
-        }
+
 
         long endTime = System.currentTimeMillis();
         MessageUtils.addMessage("State refreshed: " + (endTime - startTime) + " ms");
@@ -123,17 +126,21 @@ public class State {
     private void stateUpdated() {
         this.npcs = npcHandler.getEnhancedNPCS();
         this.npcConfigs = npcHandler.getCachedNPCConfigs();
+
         for (EnhancedNPC enhancedNPC : getNpcs()) {
             MessageUtils.addMessage(enhancedNPC.getNpc().getName() + ": " + enhancedNPC.getTicksUntilAttack() + "ticks until attack");
         }
-        ;
         setUpToDate(true);
     }
 
     private void processState() {
         upToDate.set(false);
         tileMap.clearTiles();
-        npcHandler.stateProcessing(this);
+        // Refresh NPC data
+        npcHandler.updateNPCs();
+        npcHandler.updateLocations();
+        // Process the NPC positions and update the TileMap
+        npcHandler.process(client, config, tileMap, playerTiles);
     }
 
     private void initializeState() {
@@ -262,5 +269,61 @@ public class State {
 
     public int getPlayerPrayerPoints() {
         return playerPrayerPoints;
+    }
+
+    public void attack(EnhancedNPC npc){
+        npc.attackThisNPC();
+    }
+
+    public void heal(){
+        for (Item item : inventoryItems) {
+            if (item != null && healingValues.containsKey(item.getId())) {
+                if (item.hasAction("Eat")) {
+                    item.interact("Eat");
+                } else {
+                    item.interact("Drink");
+                }
+                break;
+            }
+        }
+    }
+
+    public void move(LocalPoint localPoint) {
+        Walker.walkTo(WorldPoint.fromLocal(client, localPoint));
+    }
+
+    @Override
+    public State clone() {
+        try {
+            State clone = (State) super.clone();
+            // Perform deep copy for fields that require it
+            clone.inventoryItems = this.inventoryItems.clone();
+            clone.playerTiles = new ArrayList<>(this.playerTiles);
+            clone.tileMap = this.tileMap.cloneTiles();
+            clone.npcHandler = this.npcHandler.clone(); // Assuming NPCHandler has a clone method
+            return clone;
+        } catch (CloneNotSupportedException e) {
+            throw new AssertionError("Cloning not supported", e);
+        }
+    }
+
+    public int getTick() {
+        return client.getTickCount();
+    }
+
+    public void setLastAttackTick(int tick) {
+        this.lastAttackTick = client.getTickCount();
+    }
+
+    public void setNextAttackTick(int attackSpeed){
+        this.nextAttackTick = getTick() + getWeaponSpeed();
+    }
+
+    public int getNextAttackTick() {
+        return lastAttackTick;
+    }
+
+    private int getWeaponSpeed() {
+        return WeaponSpeedMap.SpeedMap.get(Equipment.fromSlot(EquipmentInventorySlot.WEAPON));
     }
 }

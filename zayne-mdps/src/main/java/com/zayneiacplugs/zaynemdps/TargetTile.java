@@ -4,7 +4,9 @@ import net.runelite.api.Client;
 import net.runelite.api.coords.LocalPoint;
 
 import javax.inject.Inject;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 public class TargetTile {
@@ -33,6 +35,27 @@ public class TargetTile {
 
     public void addAttackInfo(int npcId, int ticksUntilAttack, ZayneMDPSConfig.Option attackType) {
         attackInfos.add(new AttackInfo(npcId, ticksUntilAttack, attackType));
+    }
+
+    public boolean hasOverlappingAttackStyles() {
+        Map<Integer, Set<ZayneMDPSConfig.Option>> ticksToAttackStyles = new HashMap<>();
+
+        for (AttackInfo attackInfo : getAttackInfos()) {
+            int ticksUntilAttack = attackInfo.getTicksUntilAttack();
+            ZayneMDPSConfig.Option attackStyle = attackInfo.getAttackType();
+
+            ticksToAttackStyles
+                    .computeIfAbsent(ticksUntilAttack, k -> new HashSet<>())
+                    .add(attackStyle);
+        }
+
+        for (Set<ZayneMDPSConfig.Option> attackStyles : ticksToAttackStyles.values()) {
+            if (attackStyles.size() > 1) {
+                return true; // There are overlapping attack styles
+            }
+        }
+
+        return false; // No overlapping attack styles
     }
 
     @Override

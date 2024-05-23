@@ -3,7 +3,7 @@ package com.zayneiacplugs.zaynemdps;
 import com.google.inject.Provides;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
-import net.runelite.api.events.ClientTick;
+import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.client.callback.ClientThread;
@@ -13,10 +13,13 @@ import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.overlay.OverlayManager;
 import net.unethicalite.api.utils.MessageUtils;
+import net.unethicalite.api.widgets.Prayers;
+import net.runelite.api.Prayer;
 import org.pf4j.Extension;
 
 import javax.inject.Inject;
 import java.io.IOException;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -31,8 +34,6 @@ import java.util.logging.Logger;
 )
 public class ZayneMDPSPlugin extends Plugin {
     @Inject
-    private ExecutorService executor;
-    @Inject
     private OverlayManager overlayManager;
     @Inject
     private Client client;
@@ -44,15 +45,12 @@ public class ZayneMDPSPlugin extends Plugin {
     private StateInfoOverlay stateInfoOverlay;
     @Inject
     private ZayneMDPSOverlay overlay;
-    private ClientTick clientTick;
-    private State state;
-    private ExecutorService executorService;
     @Inject
     private Logger log;
+    private State state;
+    private ExecutorService executorService;
     private boolean isStartingUp;
-
-    public ZayneMDPSPlugin() {
-    }
+    private MinimaxAlphaBeta minimax;
 
     @Provides
     ZayneMDPSConfig provideConfig(ConfigManager configManager) {
@@ -70,15 +68,15 @@ public class ZayneMDPSPlugin extends Plugin {
             stateInfoOverlay.addState(state);
             overlayManager.add(stateInfoOverlay);
             overlayManager.add(overlay);
-            MessageUtils.addMessage("Checking state shit: ");
+            MessageUtils.addMessage("Checking state initialization:");
             MessageUtils.addMessage("\n" + state.getClient().toString() +
                     "\n" + state.getNpcs().toString() +
                     "\n" + state.tileMap.getAllTiles().size() +
                     "\n" + state.playerTiles.size());
             this.isStartingUp = false;
+            this.minimax = new MinimaxAlphaBeta(client, state);
         }
     }
-
 
     @Override
     protected void shutDown() throws IOException {
@@ -97,22 +95,8 @@ public class ZayneMDPSPlugin extends Plugin {
 
     private void initializeExecutorService() {
         if (executorService == null || executorService.isShutdown()) {
-            executorService = Executors.newFixedThreadPool(2);
+            executorService = Executors.newSingleThreadExecutor();
         }
-    }
-
-    private void initializeState() throws IOException {
-
-        if (client == null) {
-            MessageUtils.addMessage("initializeState: client is null");
-        }
-        if (config == null) {
-            MessageUtils.addMessage("initializeState: config is null");
-        }
-        if (executorService == null) {
-            MessageUtils.addMessage("initializeState: executorService is null");
-        }
-
     }
 
     @Subscribe
@@ -120,17 +104,60 @@ public class ZayneMDPSPlugin extends Plugin {
         if (isStartingUp) {
             return;
         }
-        if (executor.isShutdown()) {
-            return;
-        } else {
-            executor.submit(() -> {
+        executorService.submit(() -> {
+            try {
                 state.refreshState();
-            });
+                List<MinimaxAlphaBeta.Action> bestActions = minimax.getBestActions();
+                for (MinimaxAlphaBeta.Action action : bestActions) {
+                    executeAction(action);
+                    MessageUtils.addMessage(action.getType());
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
+    }
+
+    private void executeAction(MinimaxAlphaBeta.Action action) {
+        switch (action.getType()) {
+            case "Attack":
+                EnhancedNPC target = action.getTarget();
+                if (target != null) {
+                    state.attack(target);
+                    state.setLastAttackTick(state.getTick());
+                }
+                break;
+            case "Heal":
+                state.heal();
+                break;
+            case "Move":
+                LocalPoint targetTile = action.getTargetTile();
+                if (targetTile != null) {
+                    state.move(targetTile);
+                }
+                break;
+            case "Pray":
+                togglePrayer(action.getPrayer());
+                break;
+            default:
+                throw new IllegalArgumentException("Unknown action type: " + action.getType());
         }
+    }
+
+    private void togglePrayer(Prayer prayer) {
+        Prayers.toggle(prayer);
     }
 
     @Subscribe
     public void onGameStateChanged(GameStateChanged gameStateChanged) {
-
+        if (gameStateChanged.getGameState() == GameState.LOGIN_SCREEN) {
+            overlayManager.remove(stateInfoOverlay);
+            overlayManager.remove(overlay);
+            executorService.shutdown();
+        } else if (gameStateChanged.getGameState() == GameState.LOGGED_IN && isStartingUp) {
+            overlayManager.add(stateInfoOverlay);
+            overlayManager.add(overlay);
+            initializeExecutorService();
+        }
     }
 }

@@ -60,7 +60,7 @@ public class StateInfoOverlay extends OverlayPanel {
                 String.valueOf(state.getNpcs().stream().map(EnhancedNPC::getNpcConfig).map(NPCConfig::getName).collect(Collectors.joining(", "))) :
                 "No NPCs";
         String tilesInMap = String.valueOf(state.tileMap.getAllTiles().size());
-        String attackStyles = String.valueOf(state.tileMap.getDistinctAttackStyles().toString());
+        String attackStyles = tilesInMap.isEmpty() ? "No tiles" : String.valueOf(state.tileMap.getDistinctAttackStyles().toString());
 
         return String.format("\nTicks until next attack: %s\nAttack Type: %s\nPlayer health: %s\nHeals: %s\nPlayer prayer: %s\nPrayer restores: %s\nPlayer run energy: %s\nSpecial Energy: %s\nNPCs: %s\nTiles in map: %s\nAttack styles: %s",
                 ticksUntilNextAttack, attackType, playerHealth, totalHeals, playerPrayer, totalPrayerRestore, playerRunEnergy, playerSpecialAttackEnergy, npcs, tilesInMap, attackStyles);

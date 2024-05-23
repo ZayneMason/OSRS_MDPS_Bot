@@ -2,12 +2,11 @@ package com.zayneiacplugs.zaynemdps;
 
 import com.google.inject.Inject;
 import net.runelite.api.Client;
+import net.runelite.api.Player;
 import net.runelite.api.coords.LocalPoint;
+import net.runelite.api.coords.WorldPoint;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 public class TileMap {
     private final Map<LocalPoint, TargetTile> tiles = new HashMap<>();
@@ -18,8 +17,9 @@ public class TileMap {
     private State state;
 
     @Inject
-    public TileMap() {
+    public TileMap(Client client) {
         this.upToDate = false;
+        this.client = client;
     }
 
     public TargetTile getTile(LocalPoint point) {
@@ -40,7 +40,7 @@ public class TileMap {
             tiles.put(localPoint, new TargetTile(localPoint, client));
             tiles.get(localPoint).addAttackInfo(0, 0, ZayneMDPSConfig.Option.OUT_OF_RANGE_OUT_LOS);
         } else {
-            tiles.get(localPoint).addAttackInfo(npc.getUniqueId(), npc.getTicksUntilAttack(), npc.npcConfig.getAttackStyle());
+            tiles.get(localPoint).addAttackInfo(npc.getUniqueId(), npc.getTicksUntilAttack(), npc.getNpcConfig().getAttackStyle());
         }
     }
 
@@ -64,7 +64,7 @@ public class TileMap {
     }
 
     public TileMap cloneTiles() {
-        TileMap copy = new TileMap();
+        TileMap copy = new TileMap(client);
         for (LocalPoint localPoint : tiles.keySet()) {
             copy.tiles.put(localPoint, this.getTile(localPoint));
         }
@@ -72,16 +72,52 @@ public class TileMap {
     }
 
     public void stateUpdated(State state) {
-
+        // Update the state if needed
     }
 
-    public Set<ZayneMDPSConfig.Option> getDistinctAttackStyles() {
-        Set<ZayneMDPSConfig.Option> distinctAttackStyles = new HashSet<>();
+    public Map<ZayneMDPSConfig.Option, Integer> getDistinctAttackStyles() {
+        Map<ZayneMDPSConfig.Option, Integer> distinctAttackStyles = new HashMap<>();
+        if (tiles.isEmpty()){
+            return distinctAttackStyles;
+        }
         for (TargetTile targetTile : tiles.values()) {
             for (AttackInfo attackInfo : targetTile.getAttackInfos()) {
-                distinctAttackStyles.add(attackInfo.getAttackType());
+                distinctAttackStyles.put(attackInfo.getAttackType(), attackInfo.getTicksUntilAttack());
             }
         }
         return distinctAttackStyles;
+    }
+
+    public List<TargetTile> getAdjacentTiles(LocalPoint localLocation) {
+        List<TargetTile> adjacentTiles = new ArrayList<>();
+        if (localLocation == null) {
+            return adjacentTiles; // Return empty list if localLocation is null
+        }
+        int baseX = localLocation.getX();
+        int baseY = localLocation.getY();
+
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dy = -1; dy <= 1; dy++) {
+                if (dx == 0 && dy == 0) continue; // Skip the tile itself
+                LocalPoint adjacentPoint = new LocalPoint(baseX + dx, baseY + dy);
+                if (ZayneUtils.validTile(WorldPoint.fromLocal(client, adjacentPoint), client)) {
+                    TargetTile adjacentTile = getTile(adjacentPoint);
+                    if (adjacentTile != null) {
+                        adjacentTiles.add(adjacentTile);
+                    }
+                }
+            }
+        }
+        return adjacentTiles;
+    }
+
+    public List<TargetTile> getSafeTiles() {
+        List<TargetTile> safeTiles = new ArrayList<>();
+        for (TargetTile tile : tiles.values()) {
+            if (!tile.hasOverlappingAttackStyles()) {
+                safeTiles.add(tile);
+            }
+        }
+        return safeTiles;
     }
 }

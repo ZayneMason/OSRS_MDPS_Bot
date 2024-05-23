@@ -1,6 +1,7 @@
 package com.zayneiacplugs.zaynemdps;
 
 import com.google.common.base.Strings;
+import net.runelite.api.AnimationID;
 import net.runelite.api.Client;
 import net.runelite.api.Perspective;
 import net.runelite.api.Point;
